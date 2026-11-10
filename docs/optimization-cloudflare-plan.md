@@ -1,6 +1,6 @@
 # 钢铁战线2 — 帧率 / 加载 / 在线访问优化方案
 
-> 编制：2026-11-09　|　更新：2026-11-10（P0 目录整理与上线主体已落地）
+> 编制：2026-11-09　|　更新：2026-11-10（P0 目录整理、上线主体、阶段 0 基线、阶段 2 按需加载均已落地）
 > 目标：优化后 `git init` → 提交 → 发布到 Cloudflare Pages
 > 本文所有体积/FPS 相关数据均来自本工作区实测（解析 GLB JSON chunk + sharp 实测压缩），非估算。
 
@@ -8,7 +8,7 @@
 
 ## 进度更新（2026-11-10）
 
-本轮已完成**目录整理与上线主体准备**；P1 / P2 深度优化尚未开始。
+本轮已完成**目录整理、上线主体准备、阶段 0 基线与阶段 2 按需加载**；阶段 1 因零损失约束实测取消，阶段 3 / 4 尚未开始。
 
 | 项 | 落地情况 |
 |---|---|
@@ -19,7 +19,9 @@
 | 校验 | `node scripts/verify-release.mjs` 静态校验通过；`node scripts/verify-browser.mjs` 端到端通过（封面→菜单→机库→战斗，0 个 404 / 0 个页面异常），基线 `drawCalls=246 / triangles=240959 / textures=58 / geometries=372` |
 | 基线提交 | `git init` + `6c60b16`（219 文件），原始 GLB 冷备 `_archive/model-original/`（170MB） |
 | 性能基线 | `scripts/probe_perf.mjs`：town 17.5 FPS / 138 calls / 1.83M triangles；plains 12.5 FPS / 183 calls / 0.92M triangles（headless 软渲染，仅作相对对比，不代表真机帧率） |
-| 待办 | **无损**纹理压缩、按需加载、帧率优化、Pages 发布（等账号信息） |
+| 阶段 2 | 按需分阶段加载已完成，首屏 **175.66MB → 6.94MB**；详见下方实测 |
+| Git 远端 | GitHub `chenchao24/ironwar-ModWar` 已推送 `main`；81 个大文件走 Git LFS（`git lfs checkout` 可恢复工作区真实文件）；默认分支待在网页端从 `__push_probe` 改为 `main` |
+| 待办 | 阶段 3（JS 打包 / preload；BGM 降码率属音质有损，待确认）、阶段 4（帧率逐项 A/B）、Cloudflare Pages 发布 |
 
 > **判断修正**：实测战斗态 `renderer.info.memory.textures=58`，说明 three 只在渲染时把纹理上传 GPU，此前「全量约 1GB 显存常驻」是理论上限而非常驻实测值；但 20 个 GLB 的 **172MB 下载量**与 CPU 侧解码/内存压力依然真实存在，仍是 P1 首要目标。
 
@@ -33,6 +35,37 @@
 > | 重复贴图去重 | 同 GLB 内 27 张 / 4.5MB、跨 GLB 87 张 / 8.7MB（后者需纹理外部化改结构），合计仅 **-7.8%**，不值得为此改 GLB 结构 |
 >
 > 结论：**169.8MB 模型体积在零画质损失下基本不可压缩**。真正的收益全部来自 ① **阶段 2 按需加载**（首屏 172MB → 3~5MB，零损失，最大杠杆）；② 阶段 4 帧率优化（不涉及画质）；③ 上线后如仍需降体积，只能走 KTX2/Basis GPU 压缩纹理，或重新评估是否接受轻微有损。阶段 3 的 BGM 降码率属音质有损，如同样要求无损则跳过。
+
+### 阶段 2 完成记录（2026-11-10）：按需分阶段加载
+
+**零画质损失**——没有改动任何模型、纹理或音频文件，只改加载时序。改动集中在 `js/main.js`（+147 / -38 行）：
+
+- 新增 `_initAssetLoader()` / `ensureAsset()` / `ensureAssets()`：首屏与按需加载共用同一个 GLTFLoader + DRACOLoader；Promise 并发去重、结果常驻缓存、失败后下次可重试。
+- `_load()` 首屏只等 **6 件布景 + 默认展示车 `t-90m3`（1.18MB）**，其余 19 辆惰性加载；`?eager=1` 可一键回退全量预载。
+- 4 处 `this.assets` 消费点全部加异步守卫：`_setupMenuShowcase`（资产未就绪时保留旧展示车）、`_loadTankThenShow`（拆 async 包装 + 原分帧预热）、`_startPrewarm`（邻车预取前先 ensure）、`_startBattle`（开战前补齐玩家车 + 随机敌方车，带防重入与状态跳变守卫）。
+
+**CDP 真实传输字节实测**（`scripts/probe-network.mjs`，禁用浏览器缓存，与 `?eager=1` 同机 A/B）：
+
+| 阶段 | 全量预载 | 按需加载 |
+|---|---|---|
+| 首屏 cover | **175.66 MB** | **6.94 MB（-96.0%，省 168.72 MB）** |
+| 主菜单 | 176.72 MB | 8.01 MB |
+| 机库（含邻车预热） | 176.72 MB | 27.98 MB |
+| 战斗 | 177.22 MB | **39.38 MB（-77.8%）** |
+
+首屏 6.94MB 构成：GLB 3.71MB（6 布景 + 默认车）、JS 2.90MB、DRACO wasm 0.27MB、CSS/HTML 0.05MB；封面已载车辆数 **20 → 1**。
+`dist/` 仍是 209.5MB（20 辆车必须随站点提供），收益体现在**首屏实际请求**而非站点总体积——用户不切的车不会产生下行流量。
+
+**验收**（新增 `scripts/probe-network.mjs`、`scripts/verify-lazy.mjs`；修正 `scripts/probe_perf.mjs` 的战斗态等待）：
+
+| 检查 | 结果 |
+|---|---|
+| `verify-release.mjs` | 132 项路径全通过 |
+| `verify-browser.mjs` | 封面 `tanks=1` → 菜单 → 机库 → 战斗，**0 个 404 / 0 页面异常 / 0 控制台错误**；战斗 `drawCalls 114 / textures 45 / geometries 241` |
+| `verify-lazy.mjs` | 8 项断言全 PASS：首屏只载默认车、18.8MB 冷门车异步切换（浮标收起 + 纹理预热）、装载期连点防重入、冷门车开战、返回菜单展示车恢复、`?eager=1` 加载 20 辆 |
+| `probe_perf.mjs` | town **17.5 → 26.0 FPS**（calls 138→139、triangles 1.83M 一致，两次可比）；plains 35.3 FPS（场景构成与基线不同，不作直接对比）；均 0 报错、无退化 |
+
+> **待微调**：机库阶段增量 19.97MB 来自左右邻 2 辆车的后台预热，不阻塞首屏与画面；若线上带宽敏感，可收敛为只预取 1 辆或延迟数秒启动。
 
 ---
 

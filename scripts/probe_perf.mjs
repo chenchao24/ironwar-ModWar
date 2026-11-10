@@ -14,7 +14,7 @@ await page.setViewport({ width: 1600, height: 900 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 
-await page.goto('http://localhost:8080/index.html', { waitUntil: 'networkidle2', timeout: 120000 });
+await page.goto('http://localhost:8080/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
 await page.waitForFunction(() => window.__game && window.__game.state !== 'loading', { timeout: 180000 });
 await sleep(1000);
 await page.evaluate(() => document.getElementById('screen-cover').click());
@@ -31,6 +31,8 @@ async function measureBattle(mapId) {
   }, mapId);
   await sleep(300);
   await page.evaluate(() => document.querySelector('#screen-hangar [data-action="start"]').click());
+  // 按需加载下开战可能临时下载战车 GLB：显式等到战斗态再采样，避免量到机库态
+  await page.waitForFunction(() => window.__game.state === 'battle', { timeout: 120000, polling: 200 });
   await sleep(2500);
   // 前进视角 + 开镜（重负载场景）
   await page.keyboard.down('KeyW');

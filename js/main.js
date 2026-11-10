@@ -140,6 +140,13 @@ class Game {
     this._hangarBusy = false;
 
     this.assets = {};
+    // ── 按需加载（阶段2）：资产任务表 / 全量回退开关 / 开战防重入 ──
+    this._assetLoader = null;
+    this._assetTasks = new Map();       // id → Promise（并发去重、失败可重试）
+    this._prewarmSkip = new Set();      // 预取失败的战车，避免预热反复重试
+    this._lazyLoad = !new URLSearchParams(location.search).has('eager');  // ?eager=1 回退全量预载
+    this._firstScreenDone = false;
+    this._startingBattle = false;
     this._bindUI();
     this._load();
 
@@ -185,41 +192,81 @@ class Game {
 
   // ─────────── 资源加载 ───────────
 
-  _load() {
+  // 资源加载器：首屏与按需加载共用一个 GLTFLoader / DRACOLoader（解码器只初始化一次）
+  _initAssetLoader() {
+    if (this._assetLoader) return this._assetLoader;
     const manager = new THREE.LoadingManager();
-    manager.onProgress = (u, l, t) => this.ui.setLoadProgress(l / t);
+    // 进度条只反映首屏；后续按需加载不再回写加载条
+    manager.onProgress = (u, l, t) => {
+      if (!this._firstScreenDone) this.ui.setLoadProgress(l / t);
+    };
     const loader = new GLTFLoader(manager);
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath('./vendor/three/jsm/libs/draco/');
     loader.setDRACOLoader(dracoLoader);
     loader.register((parser) => new GLTFPBRSpecGlossExt(parser));
-    const jobs = Object.entries(TANKS).map(([id, cfg]) =>
-      new Promise((res, rej) => loader.load(cfg.model, (g) => { this.assets[id] = g; res(); }, undefined, rej))
-    );
-    // 布景资产：小镇套件 + 植被（两张地图共用；buildMap 按需拆件）
+    this._assetLoader = loader;
+    return loader;
+  }
+
+  // 惰性加载单台战车：并发去重 + 结果常驻缓存 + 失败后下次可重试
+  // （只缓存已解析的 gltf.scene，不卸载；Tank 构造仍需各自 clone）
+  ensureAsset(key) {
+    if (this.assets[key]) return Promise.resolve(this.assets[key]);
+    if (!TANKS[key]) return Promise.reject(new Error('未知战车: ' + key));
+    const loader = this._initAssetLoader();
+    let task = this._assetTasks.get(key);
+    if (!task) {
+      task = new Promise((res, rej) => {
+        loader.load(TANKS[key].model, (g) => { this.assets[key] = g; res(g); }, undefined, rej);
+      }).then(
+        (g) => { this._assetTasks.delete(key); return g; },
+        (e) => { this._assetTasks.delete(key); throw e; }
+      );
+      this._assetTasks.set(key, task);
+    }
+    return task;
+  }
+
+  ensureAssets(keys) {
+    return Promise.all([...new Set(keys)].map((k) => this.ensureAsset(k)));
+  }
+
+  // 首屏：只等「6 件布景 + 默认展示车」，其余 19 辆按需加载（?eager=1 可回退全量预载）
+  async _load() {
+    const loader = this._initAssetLoader();
+    // 布景资产：小镇套件 + 植被（两张地图共用；World 构建强依赖全部 6 件）
     this._mapAssets = {};
     const PROPS = { town_kit: 'houseModel/town_kit.glb', leaf_tree: 'houseModel/objects/leaf_tree.glb', pine_tree: 'houseModel/objects/pine_tree.glb', rock: 'houseModel/objects/rock.glb', rock2: 'houseModel/objects/rock2.glb', wood_log: 'houseModel/objects/wood_log.glb' };
-    for (const [k, url] of Object.entries(PROPS)) {
-      jobs.push(new Promise((res) => loader.load(url, (g) => { this._mapAssets[k] = g; res(); }, undefined, res)));
-    }
-    Promise.all(jobs).then(async () => {
-      // 世界就绪：装配首张地图 + 依赖世界的各系统
-      this.world = this._buildWorld();
-      this.shells = new ShellManager(this.scene, this.effects, audio, this.world);
-      this.ui.initMinimap(this.world);
-      this.visibility.world = this.world;
-      this.visibility.obstacles = this.world.obstacles;
-      this.smoke.world = this.world;
-      this.ui.setLoadProgress(1);
-      // 车库程序化构建（canvas 贴图 + PMREM 环境等一次性重活）在加载画面内完成，
-      // 消除首次进入机库时的整段卡顿
-      if (!this.garage) this.garage = new Garage(this.scene, this.renderer, this.ui.settings.quality);
-      setTimeout(() => { this.ui.loadDone(); this._toCover(); }, 300);
-      this._setupMenuShowcase();
-    }).catch((e) => {
+    const propJobs = Object.entries(PROPS).map(([k, url]) =>
+      new Promise((res) => loader.load(url, (g) => { this._mapAssets[k] = g; res(); }, undefined, res))
+    );
+    const defaultKey = (this.ui && this.ui.selectedTank) || 't-90m3';
+    const tankJobs = this._lazyLoad
+      ? [this.ensureAsset(defaultKey)]
+      : Object.keys(TANKS).map((id) => this.ensureAsset(id));
+    try {
+      await Promise.all([...propJobs, ...tankJobs]);
+    } catch (e) {
       console.error('模型加载失败', e);
-      document.querySelector('.load-text').textContent = '资源加载失败，请检查 model 目录';
-    });
+      const el = document.querySelector('.load-text');
+      if (el) el.textContent = '资源加载失败，请检查 model 目录';
+      return;
+    }
+    this._firstScreenDone = true;
+    // 世界就绪：装配首张地图 + 依赖世界的各系统
+    this.world = this._buildWorld();
+    this.shells = new ShellManager(this.scene, this.effects, audio, this.world);
+    this.ui.initMinimap(this.world);
+    this.visibility.world = this.world;
+    this.visibility.obstacles = this.world.obstacles;
+    this.smoke.world = this.world;
+    this.ui.setLoadProgress(1);
+    // 车库程序化构建（canvas 贴图 + PMREM 环境等一次性重活）在加载画面内完成，
+    // 消除首次进入机库时的整段卡顿
+    if (!this.garage) this.garage = new Garage(this.scene, this.renderer, this.ui.settings.quality);
+    setTimeout(() => { this.ui.loadDone(); this._toCover(); }, 300);
+    this._setupMenuShowcase();
   }
 
   // ─────────── 机库展示车（缓存复用 + 纹理预热，见 _startPrewarm） ───────────
@@ -260,8 +307,15 @@ class Game {
   }
 
   _setupMenuShowcase() {
-    this._parkShowcase();
     const key = (this.ui && this.ui.selectedTank) || 't-90m3';
+    // 按需加载：资产未就绪时保留当前展示车，后台补齐后重建（_frame 对 menuTank 已判空）
+    if (!this.assets[key]) {
+      this.ensureAsset(key).then(() => {
+        if (((this.ui && this.ui.selectedTank) || 't-90m3') === key) this._setupMenuShowcase();
+      }).catch((e) => console.error('展示车加载失败', e));
+      return;
+    }
+    this._parkShowcase();
     // 机库态优先复用缓存展示车（落在车库平地 y=0）；菜单态构建车落回战场地形
     if (this.garage && this.garage.visible) {
       const t = this._ensureHangarTank(key);
@@ -301,7 +355,36 @@ class Game {
 
   // ── 分帧装载展示车：构建+编译 → 每帧上传少量纹理（页面保持可动，浮标显示进度）──
   //    全部就绪后无缝换车（首帧即顺滑），替代旧的一次性 1-2s 冻结。
-  _loadTankThenShow(key) {
+  // 按需加载：先确保该战车 GLB 就绪，再走原有分帧纹理预热（冷门车首切约 1s，浮标提示）
+  async _loadTankThenShow(key) {
+    if (!this.assets[key]) {
+      this.ui.showHangarLoading(true, '载入坦克…', 0);
+      try {
+        await this.ensureAsset(key);
+      } catch (e) {
+        console.error('战车加载失败', e);
+        this.ui.showHangarLoading(false);
+        this._hangarBusy = false;
+        return;
+      }
+      // 加载期间用户已切走或离开机库：放弃本次装载
+      if (this.state !== 'hangar' || this.ui.selectedTank !== key) {
+        this.ui.showHangarLoading(false);
+        this._hangarBusy = false;
+        return;
+      }
+    }
+    this._prewarmSkip.delete(key);   // 该车已成功加载，恢复后台预热资格
+    try {
+      this._loadTankThenShowSync(key);
+    } catch (e) {
+      console.error('展示车构建失败', e);
+      this.ui.showHangarLoading(false);
+      this._hangarBusy = false;
+    }
+  }
+
+  _loadTankThenShowSync(key) {
     const tank = this._ensureHangarTank(key);
     const list = this._collectTankTextures(tank);
     const total = Math.max(list.length, 1);
@@ -347,13 +430,20 @@ class Game {
       const keys = Object.keys(TANKS);
       const cur = keys.indexOf(this.ui.selectedTank);
       const neighbors = [keys[(cur + 1) % keys.length], keys[(cur - 1 + keys.length) % keys.length]];
-      let key = neighbors.find((k) => !this._prewarmed.has(k)) || null;
+      let key = neighbors.find((k) => !this._prewarmed.has(k) && !this._prewarmSkip.has(k)) || null;
       if (!key) {
         for (const k of this._hangarCache.keys()) {
-          if (!this._prewarmed.has(k)) { key = k; break; }
+          if (!this._prewarmed.has(k) && !this._prewarmSkip.has(k)) { key = k; break; }
         }
       }
       if (!key) { this._prewarming = false; return; }
+      // 按需加载：邻车 GLB 尚未下载时先静默预取，就绪后下一帧再预建/预热
+      if (!this.assets[key]) {
+        this.ensureAsset(key)
+          .catch(() => this._prewarmSkip.add(key))
+          .then(() => requestAnimationFrame(step));
+        return;
+      }
       if (!this._hangarCache.has(key)) this._ensureHangarTank(key);
       if (this._prewarmKey !== key) {
         this._prewarmKey = key;
@@ -519,9 +609,9 @@ class Game {
       onHangarPrev: () => { audio.playUIClick(); this._cycleHangar(-1); },
       onHangarNext: () => { audio.playUIClick(); this._cycleHangar(1); },
       onHangarSelect: (key) => { audio.playUIClick(); this._selectHangarTank(key); },
-      onStartBattle: () => { audio.playUIClick(); this._startBattle(); },
+      onStartBattle: () => { audio.playUIClick(); this._startBattle().catch((e) => console.error('开战失败', e)); },
       onResultMenu: () => { audio.playUIClick(); this._endToMenu(); },
-      onRetry: () => { audio.playUIClick(); this._startBattle(); },
+      onRetry: () => { audio.playUIClick(); this._startBattle().catch((e) => console.error('重试失败', e)); },
       onPauseResume: () => { audio.playUIClick(); this._resume(); },
       onPauseMenu: () => { audio.playUIClick(); this.paused = false; this._endToMenu(); },
       onSettingsChanged: (s) => {
@@ -557,7 +647,30 @@ class Game {
   }
 
   // ─────────── 战斗流程 ───────────
-  _startBattle() {
+  // 按需加载：开战前先确保「玩家车 + 随机敌方车」两份 GLB 就绪（冷门车由浮标提示）
+  async _startBattle() {
+    if (this._startingBattle) return;
+    this._startingBattle = true;
+    const playerKey = this.ui.selectedTank || 't-90m3';
+    const enemyKeys = Object.keys(TANKS).filter(k => k !== playerKey);
+    const enemyKey = enemyKeys[Math.floor(Math.random() * enemyKeys.length)];
+    const fromState = this.state;
+    try {
+      this.ui.showHangarLoading(true, '载入战场…', 0);
+      await this.ensureAssets([playerKey, enemyKey]);
+    } catch (e) {
+      console.error('开战资源加载失败', e);
+      this.ui.showHangarLoading(false);
+      this._startingBattle = false;
+      return;
+    }
+    // 等待期间用户已返回菜单/切到别的界面：放弃本次开战
+    if (this.state !== fromState) {
+      this.ui.showHangarLoading(false);
+      this._startingBattle = false;
+      return;
+    }
+    this._startingBattle = false;
     // 退出车库：还原战场可见性与光照（曝光稍后按地图基调设置）
     if (this.garage) this.garage.hide();
     if (this.world) this.world.root.visible = true;
@@ -587,11 +700,7 @@ class Game {
     // 地图曝光基调（小镇 1.12 午后 / 平原 1.28）
     this.renderer.toneMappingExposure = (this.world.map.exposure != null) ? this.world.map.exposure : 1.28;
 
-    // 玩家：选择界面所选战车
-    const playerKey = this.ui.selectedTank || 't-90m3';
-    // 敌方：随机选一台非玩家战车
-    const enemyKeys = Object.keys(TANKS).filter(k => k !== playerKey);
-    const enemyKey = enemyKeys[Math.floor(Math.random() * enemyKeys.length)];
+    // 玩家 / 敌方 key 已在开战前确定（用于按需加载）
     this.enemyName = TANKS[enemyKey].name;
 
     // ── 随机出生方位（平原 1300m 对峙；超出 1000m 观察距离 → 开局互盲推进接触）──
