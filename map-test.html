@@ -1,0 +1,2528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<title>地图测试 · 东欧战区小镇（游戏同款操控）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #101418; color: #dde3e8; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; overflow: hidden; }
+  #canvas { display: block; width: 100vw; height: 100vh; }
+
+  /* —— 载入遮罩 —— */
+  #loading {
+    position: fixed; inset: 0; background: #101418; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity .5s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  #loading h1 { font-size: 26px; font-weight: 600; letter-spacing: 4px; color: #9fb6c8; margin-bottom: 26px; }
+  #barWrap { width: 340px; height: 4px; background: #26303a; border-radius: 2px; overflow: hidden; }
+  #bar { width: 0%; height: 100%; background: #5b8747; transition: width .2s; }
+  #loadText { margin-top: 14px; font-size: 13px; color: #6c7a86; letter-spacing: 1px; }
+
+  /* —— 进入遮罩（音频需用户手势） —— */
+  #enterMask {
+    position: fixed; inset: 0; background: rgba(10, 14, 18, 0.88); z-index: 99;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
+  }
+  #enterMask.hide { display: none; }
+  #enterMask h2 { font-size: 30px; letter-spacing: 6px; color: #c8d6e0; margin-bottom: 14px; font-weight: 600; }
+  #enterMask p { font-size: 14px; color: #7a8894; margin-bottom: 34px; letter-spacing: 2px; }
+  #enterBtn {
+    font-size: 18px; letter-spacing: 4px; color: #101418; background: #8fb073;
+    border: none; border-radius: 4px; padding: 14px 46px; cursor: pointer; font-weight: 600;
+  }
+  #enterBtn:hover { background: #a3c487; }
+
+  /* —— 暂停面板 —— */
+  #pausePanel {
+    position: fixed; inset: 0; background: rgba(10, 14, 18, 0.82); z-index: 98;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+  }
+  #pausePanel.show { display: flex; }
+  #pausePanel h2 { font-size: 26px; letter-spacing: 6px; color: #c8d6e0; margin-bottom: 26px; }
+  #pausePanel button {
+    font-size: 15px; letter-spacing: 2px; color: #dde3e8; background: #2c3a46;
+    border: 1px solid #46586a; border-radius: 4px; padding: 10px 38px; cursor: pointer; margin: 6px;
+  }
+  #pausePanel button:hover { background: #3a4c5c; }
+
+  /* —— HUD —— */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: none; }
+  #hud.show { display: block; }
+
+  /* 准星：中心点 + 散布圈 */
+  #reticle { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  #retDot {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.95);
+    box-shadow: 0 0 3px rgba(0,0,0,0.8);
+  }
+  #retRing {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    border: 1.6px solid rgba(255,255,255,0.55); border-radius: 50%;
+    box-shadow: 0 0 3px rgba(0,0,0,0.6), inset 0 0 3px rgba(0,0,0,0.4);
+  }
+  #rangeText {
+    position: absolute; left: 50%; top: calc(50% + 60px); transform: translateX(-50%);
+    font-family: Consolas, monospace; font-size: 15px; color: #ffd88a; letter-spacing: 1px;
+    text-shadow: 0 0 3px #000;
+  }
+  /* 瞄准缩圈进度（与 ui.js aim-progress 一致：缩圈 X% / 已瞄准） */
+  #aimText {
+    position: absolute; left: 50%; top: calc(50% + 82px); transform: translateX(-50%);
+    font-family: Consolas, monospace; font-size: 12px; color: #b8c4cc; letter-spacing: 1px;
+    text-shadow: 0 0 3px #000;
+  }
+  #aimText.aimed { color: #9be89b; }
+  #retRing.aimed { border-color: rgba(150, 230, 150, 0.85); }
+
+  /* 狙击镜 */
+  #scopeOverlay {
+    position: absolute; inset: 0; display: none;
+    background: radial-gradient(circle at 50% 50%, transparent 0, transparent 34vmin, rgba(0,0,0,0.97) 36vmin);
+  }
+  #scopeOverlay.show { display: block; }
+  #scopeCross { position: absolute; left: 50%; top: 50%; width: 68vmin; height: 68vmin; transform: translate(-50%,-50%); }
+  #scopeCross::before, #scopeCross::after {
+    content: ''; position: absolute; background: rgba(20,24,20,0.9);
+  }
+  #scopeCross::before { left: 50%; top: 0; bottom: 0; width: 1.5px; transform: translateX(-50%); }
+  #scopeCross::after { top: 50%; left: 0; right: 0; height: 1.5px; transform: translateY(-50%); }
+  #scopeZoom {
+    position: absolute; left: 50%; top: calc(50% + 30vmin); transform: translateX(-50%);
+    font-family: Consolas, monospace; font-size: 15px; color: #cfe0b8; text-shadow: 0 0 3px #000; letter-spacing: 1px;
+  }
+  /* 镜内散布虚线圈（尺寸随当前散布与变倍换算，与 ui.js gs-disp 一致） */
+  #gsDisp {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 8px; height: 8px; border: 1.5px dashed rgba(170, 235, 170, 0.8); border-radius: 50%;
+  }
+  /* 镜内开火白闪（与 ui.js gs-flash 一致） */
+  #scopeFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #scopeFlash.show { animation: scopeFlashAnim 0.18s ease-out; }
+  @keyframes scopeFlashAnim { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+
+  /* 装填条（底部中央） */
+  #reloadWrap {
+    position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
+    width: 240px; height: 7px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25); border-radius: 4px;
+  }
+  #reloadBar { height: 100%; width: 0%; background: #8fb073; border-radius: 3px; }
+  #reloadText {
+    position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%);
+    font-size: 12px; color: #b8c4cc; text-shadow: 0 0 3px #000; letter-spacing: 1px;
+  }
+
+  /* 弹药面板（右下） */
+  #ammoPanel {
+    position: absolute; right: 16px; bottom: 16px; text-align: right;
+    font-family: Consolas, monospace; font-size: 13px; line-height: 1.9; color: #c8d2da;
+    text-shadow: 0 0 3px #000;
+  }
+  #ammoPanel .sel { color: #ffd88a; }
+  #ammoPanel .dim { color: #5f6d79; }
+
+  /* 左下状态 */
+  #statusPanel {
+    position: absolute; left: 16px; bottom: 16px;
+    font-family: Consolas, monospace; font-size: 13px; line-height: 1.9; color: #9fb6c8;
+    text-shadow: 0 0 3px #000;
+  }
+  #statusPanel span { color: #e8c06a; }
+
+  /* 消息条 */
+  #msgBar {
+    position: absolute; left: 50%; top: 15%; transform: translateX(-50%);
+    font-size: 17px; letter-spacing: 2px; color: #f0e6c8; text-shadow: 0 0 4px #000;
+    opacity: 0; transition: opacity .3s; white-space: nowrap;
+  }
+
+  /* 操作说明 */
+  #helpBar {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    font-size: 11.5px; color: rgba(180,192,202,0.6); letter-spacing: 1px; text-shadow: 0 0 3px #000;
+    white-space: nowrap;
+  }
+
+  /* 小地图 */
+  #minimapWrap {
+    position: fixed; right: 12px; top: 12px; z-index: 11;
+    background: rgba(14, 20, 26, 0.82); border: 1px solid #2c3a46; border-radius: 6px; padding: 8px;
+  }
+  #minimapWrap .label { font-size: 11px; color: #5f6d79; text-align: center; margin-top: 5px; letter-spacing: 1px; }
+  #minimap { display: block; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <h1>东欧战区 · 小镇地图测试</h1>
+  <div id="barWrap"><div id="bar"></div></div>
+  <div id="loadText">正在载入模型资源…</div>
+</div>
+
+<div id="enterMask" class="hide">
+  <h2>东欧战区 · KLENOVO 小镇</h2>
+  <p>2000m × 2000m · 十字公路 · 游戏同款操控 / 视角 / 弹道 / 音效</p>
+  <button id="enterBtn">进 入 战 场</button>
+</div>
+
+<div id="pausePanel">
+  <h2>已暂停</h2>
+  <button id="btnResume">继续战斗（ESC）</button>
+  <button id="btnRespawn">坦克复位</button>
+</div>
+
+<div id="hud">
+    <div id="reticle"><div id="retRing"></div><div id="retDot"></div></div>
+    <div id="rangeText"></div>
+    <div id="aimText"></div>
+    <div id="scopeOverlay"><div id="scopeCross"></div><div id="gsDisp"></div><div id="scopeZoom"></div><div id="scopeFlash"></div></div>
+    <div id="reloadWrap"><div id="reloadBar"></div></div>
+    <div id="reloadText"></div>
+    <div id="ammoPanel"></div>
+    <div id="statusPanel"></div>
+    <div id="msgBar"></div>
+    <div id="helpBar">W/S 油门 · A/D 转向 · SPACE 刹车 · 鼠标观瞄 · RMB/SHIFT 狙击镜 · 滚轮变倍/视距 · LMB 开火 · F 机枪 · G 烟雾弹 · 1/2/3 弹种 · R 维修 · T 灭火 · C 观赏视角 · ESC 暂停</div>
+  </div>
+
+<div id="minimapWrap" style="display:none">
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div class="label">战场态势 · 2000m</div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<!-- 与 index.html 相同的本地 three 映射（保证 js/ 游戏模块解析到同一实例） -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+const mergeGeos = BufferGeometryUtils.mergeGeometries || BufferGeometryUtils.mergeBufferGeometries;
+// —— 游戏正式模块（与 index.html 战斗完全同一套代码） ——
+import { TANKS, GAME, CAMERA, SHELL_TYPES } from './js/config.js';
+import { Tank } from './js/tank.js';
+import { CameraRig } from './js/camera.js';
+import { Input } from './js/input.js';
+import { ParticleSystem } from './js/particles.js';
+import { Effects } from './js/effects.js';
+import { ShellManager } from './js/shell.js';
+import { TrackMarks } from './js/trackmarks.js';
+import { SmokeManager } from './js/smoke.js';
+import { audio } from './js/audio.js';
+
+// ═══════════════════════ 基础工具 ═══════════════════════
+const clamp = THREE.MathUtils.clamp;
+const damp = THREE.MathUtils.damp;
+const sstep = THREE.MathUtils.smoothstep;
+const UP = new THREE.Vector3(0, 1, 0);
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+
+// 确定性随机（地图布局可复现）
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rand = mulberry32(20260901);
+
+// KHR_materials_pbrSpecularGlossiness 兼容（与 main.js 相同）
+class GLTFPBRSpecGlossExt {
+  constructor(parser) { this.parser = parser; this.name = 'KHR_materials_pbrSpecularGlossiness'; }
+  getMaterialType() { return THREE.MeshStandardMaterial; }
+  extendMaterialParams(materialIndex, materialParams) {
+    const parser = this.parser;
+    const matDef = parser.json.materials[materialIndex];
+    const ext = matDef && matDef.extensions && matDef.extensions[this.name];
+    if (!ext) return Promise.resolve();
+    const pending = [];
+    const diffuse = ext.diffuseFactor !== undefined ? ext.diffuseFactor : [1, 1, 1, 1];
+    materialParams.color = new THREE.Color(diffuse[0], diffuse[1], diffuse[2]);
+    materialParams.opacity = diffuse[3];
+    if (ext.diffuseTexture) pending.push(parser.assignTexture(materialParams, 'map', ext.diffuseTexture, THREE.SRGBColorSpace));
+    const gloss = ext.glossinessFactor !== undefined ? ext.glossinessFactor : 1;
+    materialParams.roughness = 1 - gloss;
+    materialParams.metalness = 0;
+    return Promise.all(pending);
+  }
+}
+
+// ═══════════════════════ 地形高度场（本地图专用） ═══════════════════════
+// 2000×2000 战场：城区（|x|,|z|<300）完全平整；十字公路走廊（±26m 内）削平；外围缓丘
+// —— 与 terrain.js 同结构的正弦叠加场，供 Tank/CameraRig/Effects/Shell 共用 ——
+// rubbleFields：摧毁废墟的行驶坡度贡献（<1.5m 废墟可通行，坦克骑上去有起伏）
+const rubbleFields = [];   // {x, z, r, h}
+function mapTerrainHeight(x, z) {
+  let h = 0;
+  h += Math.sin(x * 0.0085 + 1.3) * Math.cos(z * 0.0078 + 0.7) * 7.0;
+  h += Math.sin(x * 0.021 + 4.2) * Math.cos(z * 0.018 + 2.1) * 2.6;
+  h += Math.sin(x * 0.049 + 0.3) * Math.cos(z * 0.055 + 5.0) * 1.0;
+  const dTown = Math.max(Math.abs(x), Math.abs(z));
+  const fTown = sstep(dTown, 300, 470);
+  const fCorr = Math.min(sstep(Math.abs(z), 26, 85), sstep(Math.abs(x), 26, 85));
+  h *= Math.min(fTown, fCorr);
+  // 废墟坡度：中心 h → 边缘 0 的余弦衰减（先距离粗筛，避免高频三角函数）
+  for (let i = 0; i < rubbleFields.length; i++) {
+    const f = rubbleFields[i];
+    const dx = x - f.x, dz = z - f.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < f.r * f.r) h += f.h * (0.5 + 0.5 * Math.cos(Math.sqrt(d2) / f.r * Math.PI));
+  }
+  return h;
+}
+
+// MapWorld：对 Tank 暴露与 terrain.js World 相同的接口（groundY / obstacles / resolveCollision / trackShadow）
+class MapWorld {
+  constructor(scene) {
+    this.scene = scene;
+    this.mapSize = 2000;
+    this.groundY = mapTerrainHeight;
+    this.obstacles = [];   // {x, z, r}
+    this.sun = null;
+    this.sunDir = null;
+  }
+  resolveCollision(pos, radius) {
+    for (const o of this.obstacles) {
+      if (o.dead) continue;
+      const dx = pos.x - o.x, dz = pos.z - o.z;
+      const d = Math.hypot(dx, dz);
+      const min = o.r + radius;
+      if (d < min && d > 0.001) {
+        pos.x = o.x + dx / d * min;
+        pos.z = o.z + dz / d * min;
+      }
+    }
+    const half = this.mapSize / 2 - 10;
+    pos.x = THREE.MathUtils.clamp(pos.x, -half, half);
+    pos.z = THREE.MathUtils.clamp(pos.z, -half, half);
+    return pos;
+  }
+  trackShadow(target) {
+    if (!this.sun) return;
+    this.sun.position.copy(this.sunDir).multiplyScalar(600).add(target);
+    this.sun.target.position.copy(target);
+    this.sun.target.updateMatrixWorld();
+  }
+}
+
+// ═══════════════════════ 渲染器 / 场景 / 相机（参数与 main.js 一致） ═══════════════════════
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;   // 午后氛围：曝光回落，避免整体发白发平
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(CAMERA.fov, innerWidth / innerHeight, 0.3, 6000);
+camera.position.set(0, 20, -180);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const world = new MapWorld(scene);
+
+// ═══════════════════════ 天空 / 光照 / 雾（东欧夏日晴天 + fbm 噪声云） ═══════════════════════
+const sunDir = new THREE.Vector3(0.5, 0.85, 0.6).normalize();
+
+let skyMat;
+{
+  const geo = new THREE.SphereGeometry(3800, 32, 16);
+  skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: {
+      topColor: { value: new THREE.Color(0x3a6ab8) },    // 晴天深蓝
+      midColor: { value: new THREE.Color(0x9cc4e4) },    // 过渡浅蓝
+      botColor: { value: new THREE.Color(0xd8e6ee) },    // 地平线亮白蓝
+      sunDir: { value: sunDir.clone() },
+      fogColor: { value: new THREE.Color(0xc8d8e4) },    // 与场景雾同色：地平线以下融合
+      uTime: { value: 0 },                               // 秒；shader 内乘慢速漂移系数
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      varying vec2 vUv;
+      void main() {
+        vDir = normalize(position);
+        vUv = uv;                          // 球体自带 UV：经线接缝处由纹理环绕无缝处理
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 topColor, midColor, botColor, sunDir, fogColor;
+      uniform float uTime;
+      varying vec3 vDir;
+      // ── fbm 噪声云（技法移植自 darkWil environment.js 柏林关配置：三层云 + 天顶 3D 噪声） ──
+      float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p); vec2 f = fract(p);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+      float fbm(vec2 p) {
+        float v = 0.0; float a = 0.5;
+        mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);  // 旋转 36.87°，打破网格对齐（去方格感）
+        for (int i = 0; i < 5; i++) { v += a * vnoise(p); p = rot * p * 2.0; a *= 0.5; }
+        return v;
+      }
+      // 3D 噪声（天顶云：dir 单位向量球面连续，无方位角接缝、无极点汇聚拉抻）
+      float hash13(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float vnoise3(vec3 p) {
+        vec3 i = floor(p); vec3 f = fract(p);
+        vec3 u = f * f * (3.0 - 2.0 * f);
+        float n000 = hash13(i);
+        float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+        float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+        float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+        float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+        float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+        float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+        float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+        return mix(mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),
+                   mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y), u.z);
+      }
+      float fbm3(vec3 p) {
+        float v = 0.0; float a = 0.5;
+        for (int i = 0; i < 5; i++) { v += a * vnoise3(p); p *= 2.02; a *= 0.5; }
+        return v;
+      }
+      void main() {
+        float h = clamp(vDir.y, 0.0, 1.0);
+        vec3 dir = normalize(vDir);
+        vec3 col = mix(botColor, midColor, smoothstep(0.0, 0.22, h));
+        col = mix(col, topColor, smoothstep(0.15, 0.7, h));
+        float sd = max(dot(dir, normalize(sunDir)), 0.0);
+        col += vec3(1.0, 0.96, 0.86) * pow(sd, 260.0) * 2.6;   // 晴天亮白日轮
+        col += vec3(1.0, 0.85, 0.55) * pow(sd, 8.0) * 0.16;    // 薄雾光晕
+
+        // ── 三层 fbm 云（柏林关参数：coverage 0.55 / farDarken 1.0 / zenithBoost 0.5） ──
+        float lit = smoothstep(0.10, 0.80, sd);
+        vec3 cloudCol = vec3(0.957, 0.965, 0.973);     // 柏林关 0xf4f6f8 亮白
+        vec3 cloudHi  = vec3(0.973, 0.957, 0.910);     // 柏林关 0xf8f4e8 暖白高光
+        vec3 cloudShade = cloudCol * 0.88;             // 云底微灰（受光混色用）
+
+        // 1. 远景层云带（地平线附近，水平拉伸；farDarken=1.0 不暗化）
+        if (dir.y < 0.35) {
+          float stretch = mix(3.5, 1.0, smoothstep(0.0, 0.25, dir.y));
+          vec2 cuv = dir.xz * stretch * 0.8;
+          cuv += vec2(uTime * 0.005, uTime * 0.0015);   // 柏林关 drift 0.005
+          float n = fbm(cuv);
+          float cloud = smoothstep(1.0 - 0.55 * 1.15, 1.0 - 0.55 * 0.25, n);  // coverage 0.55
+          float band = smoothstep(0.32, 0.08, dir.y) * smoothstep(-0.08, 0.04, dir.y);
+          cloud *= band;
+          vec3 farCol = mix(cloudCol, cloudHi * 0.85, lit);
+          col = mix(col, farCol, cloud * 0.85);
+        }
+        // 2. 中空层积云（主要云层，中等密度）
+        if (dir.y > 0.06 && dir.y < 0.75) {
+          vec2 cuv2 = dir.xz * 1.0 + vec2(uTime * 0.0035, uTime * 0.0010);
+          float n2 = fbm(cuv2 + vec2(7.3, 2.1));       // 偏移避免与层云重复
+          float cloud2 = smoothstep(1.0 - 0.55 * 0.9, 1.0 - 0.55 * 0.3, n2);
+          float band2 = smoothstep(0.06, 0.25, dir.y) * smoothstep(0.75, 0.40, dir.y);
+          cloud2 *= band2 * 0.80;
+          vec3 midCol = mix(cloudShade, cloudHi, lit);
+          col = mix(col, midCol, cloud2);
+        }
+        // 3. 高空天顶卷云（zenithBoost 0.5：加密 + band 上界推高 + 3D 噪声采样——天顶无拉抻无接缝）
+        if (dir.y > 0.25) {
+          vec3 c3 = dir * 3.0 + vec3(uTime * 0.002, 0.0, 0.0) + vec3(15.7, 8.2, 3.1);
+          float n3 = fbm3(c3);
+          float thrLow = mix(0.45, 0.28, 0.5);          // zenithBoost=0.5 → 阈值 0.365
+          float cloud3 = smoothstep(thrLow, thrLow + 0.20, n3);
+          float band3 = smoothstep(0.25, 0.45, dir.y) * smoothstep(1.50, 0.60, dir.y);  // 上界 1.50：天顶不衰减
+          cloud3 *= band3 * mix(0.50, 0.85, 0.5);       // 密度 0.675
+          vec3 highCol = mix(cloudCol * 1.15, cloudHi * 1.08, lit);
+          col = mix(col, highCol, cloud3);
+        }
+
+        col = mix(col, vec3(0.82, 0.87, 0.9), (1.0 - smoothstep(0.0, 0.14, h)) * 0.35);
+        // 地平线以下 → 雾色：地图边缘外的穹底与远处雾化地面无缝融合
+        col = mix(fogColor, col, smoothstep(-0.09, 0.015, vDir.y));
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+  scene.add(new THREE.Mesh(geo, skyMat));
+
+  // 线性距离雾：80m 起雾，1800m 完全雾化——中距离即有可感的空气层次
+  scene.fog = new THREE.Fog(0xc8d8e4, 80, 1800);
+
+  // 光照整体减弱：午后斜阳氛围（非正午顶光），阴面更实、层次更明显
+  scene.add(new THREE.HemisphereLight(0xbccfe6, 0x7e8a6a, 1.45));
+  scene.add(new THREE.AmbientLight(0x9a9a94, 0.5));
+
+  const sun = new THREE.DirectionalLight(0xffe8c2, 3.4);
+  sun.position.copy(sunDir).multiplyScalar(600);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const sc = 90;
+  sun.shadow.camera.left = -sc; sun.shadow.camera.right = sc;
+  sun.shadow.camera.top = sc; sun.shadow.camera.bottom = -sc;
+  sun.shadow.camera.near = 100; sun.shadow.camera.far = 1200;
+  sun.shadow.bias = -0.0006;
+  scene.add(sun);
+  scene.add(sun.target);
+  world.sun = sun;
+  world.sunDir = sunDir;
+}
+
+// ═══════════════════════ 程序化贴图 ═══════════════════════
+function makeGroundTexture() {
+  const s = 512, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.fillStyle = '#5d5a3c';
+  g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 90; i++) {
+    const x = rand() * s, y = rand() * s, r = 20 + rand() * 70;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    const cols = ['107,100,64', '88,90,58', '122,108,70', '74,78,50', '96,86,58'];
+    const col = cols[(rand() * cols.length) | 0];
+    gr.addColorStop(0, `rgba(${col},0.55)`);
+    gr.addColorStop(1, `rgba(${col},0)`);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, s, s);
+  }
+  for (let i = 0; i < 9000; i++) {
+    const v = rand();
+    g.fillStyle = v < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(200,190,140,0.08)';
+    g.fillRect(rand() * s, rand() * s, 1.5, 1.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(90, 90);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function makeAsphaltTexture() {
+  const s = 256, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.fillStyle = '#3b3d3f';
+  g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2600; i++) {
+    const v = rand();
+    g.fillStyle = v < 0.5 ? 'rgba(0,0,0,0.16)' : 'rgba(160,160,155,0.10)';
+    g.fillRect(rand() * s, rand() * s, 1.4, 1.4);
+  }
+  for (let i = 0; i < 8; i++) {
+    g.fillStyle = `rgba(28,29,30,${0.25 + rand() * 0.3})`;
+    g.beginPath();
+    g.ellipse(rand() * s, rand() * s, 12 + rand() * 26, 8 + rand() * 18, rand() * 3.14, 0, 6.29);
+    g.fill();
+  }
+  g.strokeStyle = 'rgba(15,15,15,0.55)';
+  for (let i = 0; i < 7; i++) {
+    g.lineWidth = 0.6 + rand();
+    g.beginPath();
+    let x = rand() * s, y = rand() * s;
+    g.moveTo(x, y);
+    for (let k = 0; k < 5; k++) { x += (rand() - 0.5) * 40; y += (rand() - 0.5) * 40; g.lineTo(x, y); }
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(210,205,190,0.55)';
+  for (let y = 8; y < s; y += 64) g.fillRect(s / 2 - 4, y, 8, 36);
+  g.fillStyle = 'rgba(200,196,182,0.28)';
+  g.fillRect(6, 0, 4, s); g.fillRect(s - 10, 0, 4, s);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function makeGravelTexture() {
+  const s = 128, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.fillStyle = '#6b6353';
+  g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2200; i++) {
+    const v = rand();
+    g.fillStyle = v < 0.4 ? 'rgba(40,36,28,0.4)' : v < 0.75 ? 'rgba(130,120,100,0.35)' : 'rgba(90,84,66,0.4)';
+    const r = 0.8 + rand() * 2.2;
+    g.fillRect(rand() * s, rand() * s, r, r);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ═══════════════════════ 地面（5000×5000：游戏区外延伸至雾中，地平线无边界） ═══════════════════════
+{
+  const seg = 480;
+  const geo = new THREE.PlaneGeometry(5000, 5000, seg, seg);
+  geo.rotateX(-Math.PI / 2);
+  const posA = geo.attributes.position;
+  for (let i = 0; i < posA.count; i++) posA.setY(i, mapTerrainHeight(posA.getX(i), posA.getZ(i)));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ map: makeGroundTexture(), roughness: 0.96, metalness: 0.0, color: 0xbdb49a });
+  mat.map.repeat.set(225, 225);   // 5000m 地面保持 22.2m/格纹理密度
+  const ground = new THREE.Mesh(geo, mat);
+  ground.receiveShadow = true;
+  scene.add(ground);
+}
+
+// ═══════════════════════ 十字公路 ═══════════════════════
+const asphaltTex = makeAsphaltTexture();
+const gravelTex = makeGravelTexture();
+const ROAD_HALF = 6, SHOULDER = 10;
+
+function buildRibbon(alongX, half, yOff, texture, vRepeatLen) {
+  const positions = [], uvs = [], indices = [];
+  const step = 4;
+  let vi = 0, prevIn = false;
+  for (let s = -1000; s <= 1000; s += step) {
+    const e1 = alongX ? [s, -half] : [-half, s];
+    const e2 = alongX ? [s, half] : [half, s];
+    const y1 = mapTerrainHeight(e1[0], e1[1]) + yOff;
+    const y2 = mapTerrainHeight(e2[0], e2[1]) + yOff;
+    positions.push(e1[0], y1, e1[1], e2[0], y2, e2[1]);
+    const v = (s + 1000) / vRepeatLen;
+    uvs.push(0, v, 1, v);
+    if (prevIn) indices.push(vi - 2, vi - 1, vi, vi - 1, vi + 1, vi);
+    vi += 2;
+    prevIn = true;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.94, metalness: 0, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+scene.add(buildRibbon(true, ROAD_HALF, 0.07, asphaltTex, 14));
+scene.add(buildRibbon(false, ROAD_HALF, 0.075, asphaltTex, 14));
+scene.add(buildRibbon(true, SHOULDER, 0.035, gravelTex, 10));
+scene.add(buildRibbon(false, SHOULDER, 0.05, gravelTex, 10));
+
+// ═══════════════════════ 布景（建筑/植被模板 + 摆放） ═══════════════════════
+const templates = new Map();
+const flora = {};
+const mapBoxes = [];    // 小地图建筑
+const townGroup = new THREE.Group();   // 供测距射线求交
+scene.add(townGroup);
+
+const KITS = {
+  house01: ['house01', 'house01_roof', 'house01_add'],
+  house03: ['house03', 'house03_add', 'house03_roof'],
+  barn01: ['barn01', 'barn01_add'],
+};
+
+// ═══ 可破坏物件规则（用户标注表）：hp=可承受炮击次数；rubbleH=炮毁残骸高度；crushH=压毁残骸高度 ═══
+// noCollide：无坦克碰撞（树/电线杆/柴堆可碾过）；solid：即使调用处 collide:false 也保留碰撞
+// drag：压毁阻力等级（碾过瞬间减速比例 + 震动）——轻质 0.10 / 中质 0.30 / 重质 0.45
+const PROP_RULES = {
+  house01: { hp: 2, rubbleH: 1.5 }, house02: { hp: 3, rubbleH: 1.8 }, house03: { hp: 2, rubbleH: 1.2 },
+  barn01: { hp: 2, rubbleH: 1.2 }, barn03: { hp: 1, rubbleH: 1.2 },
+  barrack01: { hp: 1, rubbleH: 0.8 }, barrack02: { hp: 2, rubbleH: 0.8 }, barrack03: { hp: 1, rubbleH: 0.8 },
+  barrack04: { hp: 2, rubbleH: 1.0 },
+  truck01: { hp: 1, rubbleH: 0.6, crushH: 0.4, drag: 0.30 },
+  trailer01: { hp: 1, rubbleH: 0.5, drag: 0.30 }, trailer02: { hp: 1, rubbleH: 0.5, drag: 0.30 },
+  watertank01: { hp: 1, rubbleH: 0.8, drag: 0.30 },
+  generator01: { hp: 1, rubbleH: 0.4, crushH: 0.3, drag: 0.30 },
+  container01: { hp: 1, rubbleH: 0.4, crushH: 0.3, drag: 0.30 },
+  container02: { hp: 1, rubbleH: 0.5, drag: 0.30 }, container03: { hp: 1, rubbleH: 0.5, drag: 0.30 },
+  cable_reel01: { hp: 1, rubbleH: 0.3, crushH: 0.2, drag: 0.10 },
+  metalplate01: { hp: 1, rubbleH: 0.15, crushH: 0.1, noCollide: true, drag: 0.10 },
+  metalplate02: { hp: 1, rubbleH: 0.15, crushH: 0.1, noCollide: true, drag: 0.10 },
+  metalplate03: { hp: 1, rubbleH: 0.15, crushH: 0.1, noCollide: true, drag: 0.10 },
+  bench01: { hp: 1, rubbleH: 0.15, crushH: 0.15, noCollide: true, drag: 0.10 },
+  sign01: { hp: 1, rubbleH: 0.2, crushH: 0.1, noCollide: true, drag: 0.10 }, sign02: { hp: 1, rubbleH: 0.2, crushH: 0.1, noCollide: true, drag: 0.10 },
+  sign03: { hp: 1, rubbleH: 0.2, crushH: 0.1, noCollide: true, drag: 0.10 }, sign04: { hp: 1, rubbleH: 0.2, crushH: 0.1, noCollide: true, drag: 0.10 },
+  utilitybox01: { hp: 1, rubbleH: 0.3, crushH: 0.2, solid: true, drag: 0.10 },
+  utilitybox02: { hp: 1, rubbleH: 0.3, crushH: 0.2, solid: true, drag: 0.10 },
+  utilitybox03: { hp: 1, rubbleH: 0.3, crushH: 0.2, solid: true, drag: 0.10 },
+  // 电线杆：炮弹穿过不可击毁，只能压倒（倒伏动画），重质阻力
+  pylon01: { hp: 1, rubbleH: 0.5, crushH: 0.3, noCollide: true, drag: 0.45 },
+};
+
+// Instanced 物件（围栏/树木/岩石/柴堆）：逐个可炮毁/压毁
+// 围栏：炮弹穿过不可击毁，只能压毁；leaf/pine：炮毁/压毁均倒伏
+const INST_PROPS = {
+  fence01: { hp: 1, rubbleH: 0.25, crushH: 0.25, drag: 0.10 },
+  fence02: { hp: 1, rubbleH: 0.25, crushH: 0.25, drag: 0.10 },
+  fence_pole01: { hp: 1, rubbleH: 0.25, crushH: 0.25, drag: 0.10 },
+  wood_log: { hp: 1, rubbleH: 0.2, crushH: 0.2, drag: 0.10 },
+  leaf: { hp: 1, rubbleH: 0.2, crushH: 0.4, drag: 0.45 },
+  pine: { hp: 1, rubbleH: 0.2, crushH: 0.4, drag: 0.45 },
+  rock: { hp: 1, rubbleH: 0.3 },       // 岩石不可压毁
+  rock2: { hp: 1, rubbleH: 0.3 },
+};
+
+const destructibles = [];   // 全部可破坏物件（group 与 inst 两类）
+const instData = {};        // Instanced 收集器：type → [rec]
+for (const k of Object.keys(INST_PROPS)) instData[k] = [];
+
+// inst 物件收集（布局阶段调用，buildInstancedProps 统一建 InstancedMesh）
+function collectInst(type, x, z, rotDeg, scale, yOff = 0) {
+  const r = INST_PROPS[type];
+  const s = scale || 1;
+  const rec = {
+    kind: 'inst', type, rule: r, hp: r.hp, maxHp: r.hp, alive: true,
+    x, z, y: mapTerrainHeight(x, z) + yOff, rot: rotDeg * Math.PI / 180, s,
+    mesh: null, i: -1, radius: 1, obstacle: null,
+  };
+  instData[type].push(rec);
+  destructibles.push(rec);
+  return rec;
+}
+
+function placeKit(nameOrKit, x, z, rotDeg, opts = {}) {
+  const names = KITS[nameOrKit] || [nameOrKit];
+  // inst 物件（围栏/柴堆）走收集器
+  if (!KITS[nameOrKit] && INST_PROPS[names[0]]) {
+    collectInst(names[0], x, z, rotDeg, opts.scale || 1);
+    return null;
+  }
+  if (!templates.has(names[0])) { console.warn('缺少模板', names[0]); return null; }
+  const rot = rotDeg * Math.PI / 180;
+  const q = new THREE.Quaternion().setFromAxisAngle(UP, rot);
+  const g = new THREE.Group();
+  const y = opts.y !== undefined ? opts.y : mapTerrainHeight(x, z);
+  g.position.set(x, y, z);
+  if (opts.scale) g.scale.setScalar(opts.scale);   // 整套件（含子件偏移）统一缩放
+  const base = templates.get(names[0]);
+  for (const n of names) {
+    const t = templates.get(n);
+    if (!t) continue;
+    const c = t.clone(true);
+    if (n === names[0]) {
+      c.position.set(0, 0, 0);
+      c.quaternion.premultiply(q);
+    } else {
+      c.position.sub(base.position).applyQuaternion(q);
+      c.quaternion.premultiply(q);
+    }
+    g.add(c);
+  }
+  townGroup.add(g);
+  // ── 注册可破坏物件 + 碰撞体 ──
+  g.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(g);
+  const w = box.max.x - box.min.x, d = box.max.z - box.min.z;
+  const rule = PROP_RULES[names[0]];
+  const solid = rule ? (rule.solid || (!rule.noCollide && opts.collide !== false)) : (opts.collide !== false);
+  if (rule) {
+    destructibles.push({
+      kind: 'group', type: names[0], group: g, rule, hp: rule.hp, maxHp: rule.hp, alive: true, box,
+      cx: (box.min.x + box.max.x) / 2, cz: (box.min.z + box.max.z) / 2,
+      radius: Math.max(w, d) / 2, height: box.max.y - box.min.y,
+      baseScaleY: opts.scale || 1, obstacle: null,
+    });
+  }
+  if (solid) {
+    const o = { x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, r: Math.max(w, d) / 2 * 0.82 };
+    world.obstacles.push(o);
+    if (rule) destructibles[destructibles.length - 1].obstacle = o;
+    mapBoxes.push({ x: g.position.x, z: g.position.z, w, d });
+  }
+  return g;
+}
+
+function placeTree(type, x, z, scale, collide = true) {
+  // 树无坦克碰撞（可碾过压毁）；×0.8 整体缩小与坦克比例协调（leaf 冠幅 5-13m / pine 4-7m）
+  const s = clamp((scale || 1) * (0.85 + rand() * 0.3) * 0.8, type === 'pine' ? 0.45 : 0.32, 0.8);
+  collectInst(type, x, z, rand() * 360, s);
+}
+
+// ═══ 院落式小镇布局：主屋 + 围栏院子 + 棚屋/柴堆/杂件 + 院内绿化 ═══
+// 建筑整体校准比例（对比坦克高 2.2-3.3m）：house01 ×1.2 墙高≈4.1m、house02 ×1.05、house03 ×1.3、谷仓 ×1.15
+const KIT_SCALE = { house01: 1.2, house02: 1.05, house03: 1.3, barn01: 1.15, barn03: 1.15 };
+
+// 院落朝向：u = 沿街方向，v = 背路方向；rot = 主屋长轴沿街的摆放角
+const SIDES = {
+  N: { ux: 1, uz: 0, vx: 0, vz: 1, rot: 90 },   // X 公路北侧，院落向 +z 展开
+  S: { ux: 1, uz: 0, vx: 0, vz: -1, rot: 90 },  // X 公路南侧
+  E: { ux: 0, uz: 1, vx: 1, vz: 0, rot: 0 },    // Z 公路东侧
+  W: { ux: 0, uz: 1, vx: -1, vz: 0, rot: 0 },   // Z 公路西侧
+};
+
+// 一户人家：临街主屋（门朝公路）+ 围栏院落（前栏留大门）+ 棚屋/柴堆/配电箱 + 院内树 + 临街行道树
+function household(cx, cz, side, opt = {}) {
+  const s = SIDES[side];
+  const halfW = opt.halfW ?? 15, depth = opt.depth ?? 38;
+  const pw = (a, b) => [cx + a * s.ux + b * s.vx, cz + a * s.uz + b * s.vz];
+
+  // —— 主屋 ——
+  const r = rand();
+  const house = opt.house || (r < 0.4 ? 'house01' : r < 0.68 ? 'house03' : r < 0.86 ? 'house02' : 'barn01');
+  const hb = house === 'barn01' ? 16 : 13;   // 谷仓进深大，更靠后
+  const [hx, hz] = pw(-3, hb);
+  placeKit(house, hx, hz, s.rot + (rand() < 0.5 ? 0 : 180), { scale: KIT_SCALE[house] || 1 });
+
+  // —— 围栏（前栏留 10m 门洞，正对主屋门） ——
+  const edges = [
+    [-halfW, 0, -5, 0], [5, 0, halfW, 0],    // 前栏两段（门洞 a∈[-5,5]）
+    [halfW, 0, halfW, depth],                // 右侧栏
+    [halfW, depth, -halfW, depth],           // 后栏
+    [-halfW, depth, -halfW, 0],              // 左侧栏
+  ];
+  for (const [a1, b1, a2, b2] of edges) {
+    const [x1, z1] = pw(a1, b1), [x2, z2] = pw(a2, b2);
+    fenceRun(x1, z1, x2, z2);
+  }
+
+  // —— 院内设施（一家一况，确定性变化） ——
+  if (opt.barn || rand() < 0.38) {
+    const sh = opt.barn || (rand() < 0.5 ? 'barrack01' : 'barrack03');
+    const [px, pz] = pw(halfW - 5.5, depth - 7);
+    placeKit(sh, px, pz, s.rot + 90, { scale: 1.1 });
+  }
+  if (rand() < 0.6) {
+    const [px, pz] = pw(-halfW + 4.5, depth - 4);
+    placeKit('wood_log', px, pz, rand() * 360, { collide: false, merge: true });
+  }
+  if (rand() < 0.7) {
+    const box = ['utilitybox01', 'utilitybox02', 'utilitybox03'][Math.floor(rand() * 3)];
+    const [px, pz] = pw(-halfW + 3, 11);
+    placeKit(box, px, pz, s.rot, { collide: false });
+  }
+  if (rand() < 0.22) {
+    const [px, pz] = pw(8, 4.5);
+    placeKit('bench01', px, pz, s.rot + 90, { collide: false });
+  }
+  if (rand() < 0.12) {
+    const [px, pz] = pw(-halfW + 7, depth - 11);
+    placeKit(rand() < 0.5 ? 'trailer01' : 'trailer02', px, pz, s.rot, { scale: 1.0 });
+  }
+
+  // —— 绿化：院内点缀 1 棵（40%）+ 临街行道树（镇内少而精） ——
+  const t1 = pw(-halfW + 3, depth - 3);
+  if (rand() < 0.4) placeTree(rand() < 0.7 ? 'leaf' : 'pine', t1[0], t1[1], 0.55 + rand() * 0.15);
+  if (rand() < 0.3) {
+    const t2 = pw(halfW - 3.5, 24);
+    placeTree('leaf', t2[0], t2[1], 0.55 + rand() * 0.15);
+  }
+  const t3 = pw(halfW + 6, 3);
+  placeTree(rand() < 0.65 ? 'leaf' : 'pine', t3[0], t3[1], 0.6 + rand() * 0.2);
+}
+
+// 临街绿地（不盖房，留出呼吸空间）：2 棵点缀
+function greenGap(cx, cz, side) {
+  const s = SIDES[side];
+  const pw = (a, b) => [cx + a * s.ux + b * s.vx, cz + a * s.uz + b * s.vz];
+  let p = pw(-7, 16); placeTree('leaf', p[0], p[1], 0.8 + rand() * 0.15);
+  p = pw(6, 27); placeTree(rand() < 0.5 ? 'pine' : 'leaf', p[0], p[1], 0.7 + rand() * 0.2);
+  if (rand() < 0.6) { p = pw(-2, 7); placeKit('bench01', p[0], p[1], s.rot + 90, { collide: false }); }
+}
+
+// 十字主街：两侧院落沿公路整齐排布（约七成住户集中于镇区）
+function mainStreet() {
+  const slots = [78, 126, 174, 222, 270];
+  for (const off of slots) {
+    for (const [x, z, side] of [
+      [off, 24, 'N'], [-off, 24, 'N'], [off, -24, 'S'], [-off, -24, 'S'],
+      [24, off, 'E'], [24, -off, 'E'], [-24, off, 'W'], [-24, -off, 'W'],
+    ]) {
+      const r = rand();
+      if (r < 0.7) household(x, z, side);
+      else if (r < 0.85) greenGap(x, z, side);
+      else household(x, z, side, { house: rand() < 0.5 ? 'barn01' : 'house03', barn: 'barrack02' });
+    }
+  }
+}
+
+// 路口小品
+function crossroad() {
+  placeKit('sign01', 13, 13, 210, { collide: false });
+  placeKit('sign02', -13, 13, 130, { collide: false });
+  placeKit('sign03', 13, -13, -35, { collide: false });
+  placeKit('sign04', -13, -13, 55, { collide: false });
+  placeKit('bench01', 20, 14, 180, { collide: false });
+  placeKit('bench01', -20, -14, 0, { collide: false });
+  placeTree('leaf', 34, 20, 0.65);
+  placeTree('leaf', -34, -20, 0.65);
+}
+
+// 西南老城：小巷密集院落（小地块小屋）
+function oldTown() {
+  const plots = [
+    [-170, -170], [-206, -170], [-242, -170],
+    [-170, -206], [-206, -206], [-242, -206],
+    [-170, -242], [-206, -242],
+  ];
+  for (const [x, z] of plots) {
+    household(x, z, 'N', { halfW: 11, depth: 26, house: rand() < 0.6 ? 'house03' : 'house01' });
+  }
+  placeTree('leaf', -224, -224, 0.8);
+  placeTree('leaf', -188, -188, 0.75);
+}
+
+// 东北庄园：大宅 + 花园围墙
+function manor() {
+  placeKit('house02', 220, 218, 135, { scale: 1.1 });
+  fenceRun(172, 172, 272, 172);
+  fenceRun(272, 172, 272, 272);
+  fenceRun(272, 272, 172, 272);
+  fenceRun(172, 272, 172, 232);
+  fenceRun(172, 208, 172, 172);       // 西侧留大门（朝镇中心）
+  placeTree('leaf', 195, 195, 0.95);
+  placeTree('leaf', 245, 250, 0.9);
+  placeTree('pine', 250, 190, 0.9);
+  placeTree('leaf', 190, 250, 0.85);
+  placeKit('bench01', 185, 220, 90, { collide: false });
+  placeKit('utilitybox01', 265, 185, 0, { collide: false });
+  placeTree('pine', 284, 210, 0.85);
+  placeTree('leaf', 210, 284, 0.8);
+}
+
+// 西北集体农庄：谷仓群 + 青储塔 + 拖车
+function farm() {
+  fenceRun(-160, 160, -272, 160);
+  fenceRun(-272, 160, -272, 272);
+  fenceRun(-272, 272, -160, 272);
+  fenceRun(-160, 272, -160, 208);
+  fenceRun(-160, 168, -160, 160);    // 东侧留门
+  placeKit('barn01', -238, 182, 90, { scale: 1.15 });
+  placeKit('barn03', -184, 186, 0, { scale: 1.15 });
+  placeKit('barn03', -240, 240, 90, { scale: 1.15 });
+  placeKit('watertank01', -170, 250, 0, { scale: 1.1 });   // 青储塔
+  placeKit('trailer01', -254, 216, 0, { scale: 1.0 });
+  placeKit('trailer02', -256, 232, 15, { scale: 1.0 });
+  placeKit('truck01', -176, 170, -90, { scale: 1.0 });
+  placeKit('wood_log', -208, 166, 25, { collide: false, merge: true });
+  placeKit('wood_log', -213, 168, -10, { collide: false, merge: true });
+  placeKit('wood_log', -203, 169, 50, { collide: false, merge: true });
+  placeTree('pine', -262, 190, 0.85);
+  placeTree('leaf', -262, 250, 0.8);
+  placeTree('leaf', -226, 262, 0.75);
+}
+
+// 东南工业堆场：办公室 + 集装箱 + 发电机（围墙围起，西侧留门）
+function industry() {
+  fenceRun(160, -160, 272, -160);
+  fenceRun(272, -160, 272, -272);
+  fenceRun(272, -272, 160, -272);
+  fenceRun(160, -272, 160, -224);
+  fenceRun(160, -200, 160, -160);
+  placeKit('barrack04', 178, -180, 0, { scale: 1.05 });
+  placeKit('barrack02', 258, -172, 90, { scale: 1.05 });
+  placeKit('container02', 228, -236, 0, { scale: 1.0 });
+  placeKit('container02', 237, -236, 0, { scale: 1.0 });
+  placeKit('container03', 232, -226, 90, { scale: 1.0 });
+  placeKit('container01', 248, -216, 12, { collide: false, scale: 1.0 });
+  placeKit('container01', 252, -212, -18, { collide: false, scale: 1.0 });
+  placeKit('generator01', 202, -252, 0, { scale: 1.0 });
+  placeKit('cable_reel01', 214, -260, 20, { collide: false });
+  placeKit('cable_reel01', 220, -256, -30, { collide: false });
+  placeKit('metalplate01', 250, -200, 10, { collide: false });
+  placeKit('metalplate02', 254, -196, -20, { collide: false });
+  placeKit('metalplate03', 258, -202, 35, { collide: false });
+  placeKit('truck01', 168, -212, 90, { scale: 1.0 });
+  placeTree('pine', 264, -264, 0.8);
+}
+
+// 外围零散农舍（沿公路四臂分布，约占三成）
+function outskirts() {
+  const FARMS = [
+    ['N', 430, 'house01'], ['N', 560, 'house03'], ['N', 690, 'barn01'],
+    ['S', 450, 'house01'], ['S', 640, 'house03'],
+    ['E', 460, 'house01'], ['E', 630, 'barn01'],
+    ['W', 445, 'house03'], ['W', 610, 'house01'],
+  ];
+  for (const [side, off, house] of FARMS) {
+    let x, z;
+    if (side === 'N') { x = off; z = 26; }
+    else if (side === 'S') { x = off; z = -26; }
+    else if (side === 'E') { x = 26; z = off; }
+    else { x = -26; z = off; }
+    household(x, z, side, { halfW: 20, depth: 44, house, barn: rand() < 0.6 ? 'barn03' : 'barrack02' });
+    const s = SIDES[side];
+    placeTree('leaf', x + s.vx * 52 + s.ux * 16, z + s.vz * 52 + s.uz * 16, 0.85);
+    placeTree('pine', x + s.vx * 56 - s.ux * 14, z + s.vz * 56 - s.uz * 14, 0.8);
+  }
+}
+
+function buildTown() {
+  crossroad();
+  mainStreet();   // 十字主街院落（集中）
+  oldTown();      // 西南老城小巷
+  manor();        // 东北庄园
+  farm();         // 西北集体农庄
+  industry();     // 东南工业堆场
+  outskirts();    // 外围零散农舍
+}
+
+function fenceRun(x1, z1, x2, z2) {
+  const dx = x2 - x1, dz = z2 - z1;
+  const len = Math.hypot(dx, dz);
+  const n = Math.max(1, Math.round(len / 4.3));
+  const rot = Math.atan2(-dz, dx) * 180 / Math.PI;
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    collectInst(i % 2 === 0 ? 'fence01' : 'fence02', x1 + dx * t, z1 + dz * t, rot, 1);
+  }
+  collectInst('fence_pole01', x2, z2, rot, 1);
+}
+
+function buildPylons() {
+  const spots = [];
+  for (let x = 340; x <= 880; x += 90) { spots.push([x, 13]); spots.push([-x, -13]); }
+  for (let z = 340; z <= 880; z += 90) { spots.push([13, z]); spots.push([-13, -z]); }
+  for (const [x, z] of spots) placeKit('pylon01', x, z, 0);
+}
+
+// 外围小片树林（林簇）中心：镇外比镇内密，16 簇
+const GROVES = [
+  [430, 270], [-400, 320], [540, -190], [-470, -260],
+  [310, 500], [-250, 540], [-320, -520], [380, -480],
+  [640, 390], [-640, 330], [610, -430], [-580, -400],
+  [760, 120], [-730, -140], [180, -700], [-160, 700],
+];
+
+function scatterNature() {
+  // 公路两侧行道树
+  for (let d = 330; d <= 950; d += 55) {
+    const j = () => (rand() - 0.5) * 8;
+    placeTree('pine', d + j(), 19 + j(), 0.8 + rand() * 0.3);
+    placeTree('pine', -d + j(), -19 + j(), 0.8 + rand() * 0.3);
+    placeTree('pine', 19 + j(), d + j(), 0.8 + rand() * 0.3);
+    placeTree('pine', -19 + j(), -d + j(), 0.8 + rand() * 0.3);
+  }
+  // 小片树林：每簇 11-17 棵，半径 28-46m（镇外小片林）
+  for (const [gx, gz] of GROVES) {
+    const n = 11 + Math.floor(rand() * 7);
+    const R = 28 + rand() * 18;
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2, rr = Math.sqrt(rand()) * R;
+      const x = gx + Math.cos(a) * rr, z = gz + Math.sin(a) * rr;
+      if (Math.abs(x) < 32 || Math.abs(z) < 32) continue;   // 避开公路走廊
+      placeTree(rand() < 0.6 ? 'pine' : 'leaf', x, z, 0.75 + rand() * 0.5);
+    }
+  }
+  // 周界林带
+  for (let i = 0; i < 170; i++) {
+    const a = (i / 170) * Math.PI * 2 + rand() * 0.02;
+    const deg = a * 180 / Math.PI;
+    const m = Math.abs(((deg % 90) + 90) % 90);
+    if (m < 8 || m > 82) continue;
+    const r = 930 + rand() * 55;
+    placeTree(rand() < 0.75 ? 'pine' : 'leaf', Math.cos(a) * r, Math.sin(a) * r, 1.0 + rand() * 0.5, false);
+  }
+  // 零散岩石（instanced，可炮毁成碎石堆；大石保留碰撞）
+  let rocks = 0, tries = 0;
+  while (rocks < 48 && tries < 600) {
+    tries++;
+    const x = (rand() - 0.5) * 1880, z = (rand() - 0.5) * 1880;
+    if (Math.max(Math.abs(x), Math.abs(z)) < 320) continue;
+    if (Math.abs(z) < 24 || Math.abs(x) < 24) continue;
+    const h = Math.abs(mapTerrainHeight(x, z));
+    if (h < 3 && rand() < 0.6) continue;
+    const type = rand() < 0.5 ? 'rock' : 'rock2';
+    const s = 0.7 + rand() * 2.1;
+    const rec = collectInst(type, x, z, rand() * 360, s, type === 'rock' ? 1.0 * s : 0);
+    if (s > 1.2) {
+      const o = { x, z, r: 1.2 * s };
+      world.obstacles.push(o);
+      rec.obstacle = o;
+    }
+    rocks++;
+  }
+  // 野外零散木堆
+  for (let i = 0; i < 6; i++) {
+    const x = (rand() - 0.5) * 1500, z = (rand() - 0.5) * 1500;
+    if (Math.max(Math.abs(x), Math.abs(z)) < 330 || Math.abs(z) < 24 || Math.abs(x) < 24) continue;
+    collectInst('wood_log', x, z, rand() * 360, 1);
+  }
+}
+
+// ═══ Instanced 物件构建 + 摧毁/压毁系统 ═══
+// 每类物件一个 InstancedMesh（draw call 极低）；炮毁/压毁通过改写实例矩阵实现
+const instGeo = {};   // type → {geo, mat, depth, w, h, d}（模板烘焙后的尺寸）
+
+function buildInstancedProps() {
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  for (const type of Object.keys(instData)) {
+    const list = instData[type];
+    if (!list.length) continue;
+    const root = (type === 'leaf' || type === 'pine' || type === 'rock' || type === 'rock2') ? flora[type] : templates.get(type);
+    if (!root) continue;
+    // 克隆模板并归零根坐标，烘焙 mesh 世界变换进几何体（与 placeKit 摆放一致）
+    const tmp = root.clone(true);
+    tmp.position.set(0, 0, 0);
+    tmp.updateMatrixWorld(true);
+    let geo = null, mat = null, depth = null;
+    tmp.traverse(o => {
+      if (!geo && o.isMesh) {
+        geo = o.geometry.clone();
+        geo.applyMatrix4(o.matrixWorld);
+        mat = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (o.customDepthMaterial) depth = o.customDepthMaterial;
+      }
+    });
+    if (!geo) continue;
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    const gw = bb.max.x - bb.min.x, gh = bb.max.y - bb.min.y, gd = bb.max.z - bb.min.z;
+    instGeo[type] = { geo, mat, depth, w: gw, h: gh, d: gd };
+
+    const im = new THREE.InstancedMesh(geo, mat, list.length);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    im.castShadow = im.receiveShadow = true;
+    im.raycast = () => {};   // 不参与测距射线
+    if (depth) im.customDepthMaterial = depth;
+    list.forEach((p, i) => {
+      q.setFromAxisAngle(UP, p.rot);
+      pos.set(p.x, p.y, p.z);
+      scl.setScalar(p.s);
+      m4.compose(pos, q, scl);
+      im.setMatrixAt(i, m4);
+      p.mesh = im; p.i = i;
+      // 实例求交数据：旋转包围盒（AABB 近似，围栏/横条类判定稍宽松可接受）
+      const w = gw * p.s, h = gh * p.s, d = gd * p.s;
+      const c = Math.abs(Math.cos(p.rot)), sn = Math.abs(Math.sin(p.rot));
+      const ex = (w * c + d * sn) / 2, ez = (w * sn + d * c) / 2;
+      p.minx = p.x - ex; p.maxx = p.x + ex;
+      p.minz = p.z - ez; p.maxz = p.z + ez;
+      p.miny = p.y; p.maxy = p.y + h;
+      p.radius = Math.max(ex, ez);
+      p.srcH = h;
+      // 树：求交用树干圆柱（枝叶可穿，树干 r≈1.5m 缩放）
+      if (type === 'leaf' || type === 'pine') { p.cyl = true; p.cr = 1.5 * p.s; }
+    });
+    townGroup.add(im);
+  }
+}
+
+// —— inst 物件压扁到目标高度（树桩/倒伏/残骸） ——
+const _iq = new THREE.Quaternion(), _ip = new THREE.Vector3(), _is = new THREE.Vector3(), _im = new THREE.Matrix4();
+function squashInstProp(p, targetH) {
+  if (!p.mesh) return;
+  _iq.setFromAxisAngle(UP, p.rot);
+  _ip.set(p.x, p.y, p.z);
+  // XZ 微缩 0.85 制造"塌缩堆"观感
+  _is.set(p.s * 0.85, Math.max(targetH / p.srcH, 0.02), p.s * 0.85);
+  _im.compose(_ip, _iq, _is);
+  p.mesh.setMatrixAt(p.i, _im);
+  p.mesh.instanceMatrix.needsUpdate = true;
+}
+
+// —— group 物件（车辆类）压扁到目标高度（仅用于压毁，建筑倒塌走 collapsing 流程） ——
+function squashGroupProp(d, targetH) {
+  d.group.scale.y = d.baseScaleY * (targetH / d.height);
+}
+
+// ── 碎片/废墟材质：深灰、土褐等低饱和多色（弃水泥灰） ──
+const mkMat = (c, r = 0.92) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0.02 });
+const DEBRIS = {
+  // 废墟/碎砖主组：深灰、暗灰、土褐、褐灰、灰褐、深褐（低饱和 6 色）
+  concrete: [0x565650, 0x63625c, 0x6e6558, 0x5c5348, 0x716b60, 0x4a463f].map(c => mkMat(c)),
+  wood: [0x6b5d4a, 0x5c5140, 0x7a6a52, 0x4e4436].map(c => mkMat(c)),   // 长条木片（土褐灰褐）
+  leaf: [0x4d6b35, 0x5d7a3e, 0x6a8247, 0x3f5a2c].map(c => mkMat(c, 0.85)),   // 落叶（橄榄绿4档）
+  pineNeedle: [0x3a5232, 0x2f4529, 0x45603a].map(c => mkMat(c, 0.85)),        // 松针（深绿3档）
+  dirt: [0x7a6f5c, 0x6b6152, 0x857a66].map(c => mkMat(c, 0.9)),              // 尘土小碎屑（灰土色）
+};
+
+// ── 多层次烟雾配色（灰白/灰/灰褐/土色） ──
+const DUST_COLORS = [
+  { c0: [0.74, 0.72, 0.68], c1: [0.62, 0.60, 0.57] },   // 灰白
+  { c0: [0.62, 0.60, 0.56], c1: [0.52, 0.50, 0.47] },   // 灰
+  { c0: [0.58, 0.53, 0.46], c1: [0.47, 0.43, 0.38] },   // 灰褐
+  { c0: [0.55, 0.48, 0.38], c1: [0.44, 0.38, 0.30] },   // 土色
+];
+const pickDust = () => DUST_COLORS[(rand() * DUST_COLORS.length) | 0];
+
+// —— 建筑战损着色：整体变灰（水泥灰 + 泥土色，非黑色） ——
+const _grayC = new THREE.Color(0x8f8c84);   // 水泥灰
+const _grayD = new THREE.Color(0x7a6f5c);   // 泥土色
+const _grayMix = _grayC.clone().lerp(_grayD, 0.4);
+function grayifyProp(d, k) {
+  if (!d._mats) {
+    d._mats = [];
+    d.group.traverse(o => {
+      if (o.isMesh) {
+        o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+        d._mats.push(o.material);
+      }
+    });
+  }
+  for (const mm of d._mats) {
+    const arr = Array.isArray(mm) ? mm : [mm];
+    for (const m of arr) {
+      if (m.color) m.color.lerp(_grayMix, k);
+      if (m.roughness !== undefined) m.roughness = Math.min(1, m.roughness + 0.1);
+    }
+  }
+}
+
+// ── 持续烟源系统：mode='fire' 火焰+灰烟；mode='smoke' 纯烟（废墟/倒树，1m 高悬浮烟尘） ──
+const propFires = [];   // {x,y,z, until, k, mode}
+let _fireAcc = 0;
+function addPropFire(x, y, z, dur, k = 0.8, mode = 'fire') {
+  propFires.push({ x, y, z, until: performance.now() / 1000 + dur, k, mode });
+}
+function updatePropFires(dt) {
+  const now = performance.now() / 1000;
+  _fireAcc += dt;
+  const emit = _fireAcc >= 0.03;
+  if (emit) _fireAcc = 0;
+  for (let i = propFires.length - 1; i >= 0; i--) {
+    const f = propFires[i];
+    if (now > f.until) { propFires.splice(i, 1); continue; }
+    if (!emit) continue;
+    const fade = Math.min(1, (f.until - now) / 4);   // 尾段淡出
+    const k = f.k * fade;
+    if (f.mode === 'smoke') {
+      // 纯烟：1m 高度左右悬浮的灰褐烟尘
+      const col = pickDust();
+      ps.spawn('smoke', {
+        x: f.x + (rand() - 0.5) * 2.2, y: f.y + 0.5 + rand() * 0.9, z: f.z + (rand() - 0.5) * 2.2,
+        vx: (rand() - 0.5) * 0.7, vy: 0.35 + rand() * 0.5, vz: (rand() - 0.5) * 0.7,
+        life: 3 + rand() * 2.5, size0: 1.6 + k * 1.2, size1: 6 + k * 5, alpha: 0.3,
+        grav: -0.15, drag: 0.35, windK: 1.1, fadeIn: 0.35, sizeEase: 1.8,
+        c0: col.c0, c1: col.c1,
+      });
+      continue;
+    }
+    // 火焰
+    ps.spawn('fire', {
+      x: f.x + (rand() - 0.5) * 1.4, y: f.y + 0.3, z: f.z + (rand() - 0.5) * 1.4,
+      vy: 1.0 + rand() * 0.7 * k, life: 0.4, size0: 0.5 + k * 0.5, size1: 1.6 + k * 1.4,
+      alpha: 0.75, sizeEase: 1.4, fadeIn: 0.2,
+      c0: [1, 0.7, 0.25], c1: [0.8, 0.22, 0.05],
+    });
+    // 灰烟
+    const col = pickDust();
+    ps.spawn('smoke', {
+      x: f.x + (rand() - 0.5) * 1.2, y: f.y + 0.8, z: f.z + (rand() - 0.5) * 1.2,
+      vx: (rand() - 0.5) * 0.5, vy: 0.8 + rand() * 0.6, vz: (rand() - 0.5) * 0.5,
+      life: 2.6 + rand() * 2, size0: 1.4, size1: 5 + k * 3, alpha: 0.26,
+      grav: -0.3, drag: 0.3, windK: 1.2, fadeIn: 0.3, sizeEase: 2,
+      c0: col.c0, c1: col.c1,
+    });
+    if (rand() < 0.2) ps.flash(new THREE.Vector3(f.x, f.y + 1, f.z), 0xff7722, 9 * k, 8);
+  }
+}
+
+// ── 大团尘云（烟雾弹级，多层配色，遮蔽倒塌过程） ──
+function bigDust(x, y, z, n, spread, sizeK = 1) {
+  bigDustAbs(x, y, z, n, spread, (5 + rand() * 5) * sizeK, (24 + rand() * 16) * sizeK);
+}
+// 绝对烟径版本：sz0 初始直径 / sz1 膨胀直径（按房屋跨度生成）
+function bigDustAbs(x, y, z, n, spread, sz0, sz1) {
+  for (let i = 0; i < n; i++) {
+    const col = pickDust();
+    ps.spawn('smoke', {
+      x: x + (rand() - 0.5) * spread, y: y + rand() * 2.5, z: z + (rand() - 0.5) * spread,
+      vx: (rand() - 0.5) * 3.2, vy: 0.9 + rand() * 1.8, vz: (rand() - 0.5) * 3.2,
+      life: 4 + rand() * 3.2, size0: sz0 * (0.75 + rand() * 0.5), size1: sz1 * (0.75 + rand() * 0.5),
+      alpha: 0.5, drag: 0.4, windK: 0.6, fadeIn: 0.25, sizeEase: 1.6,
+      c0: col.c0, c1: col.c1,
+    });
+  }
+}
+
+// ── 弹着点外向方向：从建筑中心指向命中点的单位向量（近心时随机） ──
+function hitOutward(d, hitPos) {
+  let dx = hitPos.x - d.cx, dz = hitPos.z - d.cz;
+  const l = Math.hypot(dx, dz);
+  if (l < 0.5) { const a = rand() * Math.PI * 2; return [Math.cos(a), Math.sin(a)]; }
+  return [dx / l, dz / l];
+}
+
+// ── 命中包围烟：主烟柱在弹着点外侧（不被楼体遮挡），环绕烟全部在建筑轮廓之外 ──
+function surroundSmoke(d, hitPos, big) {
+  const w = d.box.max.x - d.box.min.x, dp = d.box.max.z - d.box.min.z;
+  const gy = mapTerrainHeight(d.cx, d.cz);
+  const [ox, oz] = hitOutward(d, hitPos);
+  // 弹着点主烟柱：沿外向推出 3-6m（墙外侧腾起），高度取命中高度
+  for (let i = 0; i < 3; i++) {
+    const off = 3 + rand() * 3;
+    const col = pickDust();
+    ps.spawn('smoke', {
+      x: hitPos.x + ox * off + (rand() - 0.5) * 2, y: hitPos.y + 0.4 + i * 1.4, z: hitPos.z + oz * off + (rand() - 0.5) * 2,
+      vx: ox * 1.6 + (rand() - 0.5) * 2, vy: 2.2 + rand() * 2, vz: oz * 1.6 + (rand() - 0.5) * 2,
+      life: 3.8 + rand() * 2.6, size0: 4.5 + rand() * 3, size1: 22 + rand() * 12,
+      alpha: 0.52, drag: 0.4, windK: 0.7, fadeIn: 0.12, sizeEase: 1.6,
+      c0: col.c0, c1: col.c1,
+    });
+  }
+  // 环绕烟罩：椭圆轮廓外一圈（半长/半宽 + 外扩），80% 偏向命中侧
+  const n = big ? 20 : 14;
+  for (let i = 0; i < n; i++) {
+    const a = (rand() < 0.8)
+      ? Math.atan2(oz, ox) + (rand() - 0.5) * 2.4          // 命中侧扇区
+      : rand() * Math.PI * 2;                              // 其余四周
+    const rx = d.cx + Math.cos(a) * (w / 2 + 1.5 + rand() * w * 0.8);
+    const rz = d.cz + Math.sin(a) * (dp / 2 + 1.5 + rand() * dp * 0.8);
+    const col = pickDust();
+    ps.spawn('smoke', {
+      x: rx, y: gy + 0.5 + rand() * 2.6, z: rz,
+      vx: (rand() - 0.5) * 2.6, vy: 1.1 + rand() * 1.8, vz: (rand() - 0.5) * 2.6,
+      life: 3.2 + rand() * 3, size0: 4 + rand() * 5, size1: 16 + rand() * 14,
+      alpha: 0.46, drag: 0.42, windK: 0.7, fadeIn: 0.15 + rand() * 0.25, sizeEase: 1.7,
+      c0: col.c0, c1: col.c1,
+    });
+  }
+}
+
+// ── 程序化废墟堆：多灰度灰砖 + 木梁，面积扩为原建筑 1.3 倍（线性 ×1.14）；house02 大宅 ×2 ──
+const RUBBLE_SCALE = { house02: 2.0 };   // 废墟范围倍率（按建筑类型）
+function buildRubblePile(d, off = null) {
+  const rk = RUBBLE_SCALE[d.type] || 1;
+  const w = (d.box.max.x - d.box.min.x) * 1.14 * rk, dp = (d.box.max.z - d.box.min.z) * 1.14 * rk;
+  const rh = d.rule.rubbleH;
+  const cx = d.cx + (off ? off.ox : 0), cz = d.cz + (off ? off.oz : 0);   // 倾斜倒塌时偏移到完全沉降侧
+  const gy = mapTerrainHeight(cx, cz);
+  const byMat = new Map();   // 材质 → 几何体数组
+  const push = (mat, geo) => { let a = byMat.get(mat); if (!a) { a = []; byMat.set(mat, a); } a.push(geo); };
+  const R = Math.max(w, dp) / 2;
+  const nBlocks = clamp(Math.round(w * dp / 3.0), 30, 92);
+  for (let i = 0; i < nBlocks; i++) {
+    // 中心高边缘低（余弦衰减），块体从 6 档灰度随机取（深浅不一）
+    const a = rand() * Math.PI * 2, rr = Math.sqrt(rand()) * R * 0.94;
+    const px = Math.cos(a) * rr * (w / Math.max(w, dp)), pz = Math.sin(a) * rr * (dp / Math.max(w, dp));
+    const fall = 1 - (rr / R) * 0.72;
+    const bw = 0.3 + rand() * 1.4, bh = (0.25 + rand() * 0.8) * fall, bd = 0.3 + rand() * 1.4;
+    const g = new THREE.BoxGeometry(bw, Math.max(bh * rh, 0.15), bd);
+    g.rotateY(rand() * Math.PI);
+    g.rotateZ((rand() - 0.5) * 0.55);
+    g.translate(px, gy + (0.1 + rand() * 0.6) * rh * fall, pz);
+    push(DEBRIS.concrete[(rand() * DEBRIS.concrete.length) | 0], g);
+  }
+  // 碎木板/灰板：平贴散落（增加层次）
+  const nPlanks = 6 + Math.floor(rand() * 5);
+  for (let i = 0; i < nPlanks; i++) {
+    const a = rand() * Math.PI * 2, rr = Math.sqrt(rand()) * R * 0.9;
+    const px = Math.cos(a) * rr, pz = Math.sin(a) * rr;
+    const g = new THREE.BoxGeometry(0.8 + rand() * 1.8, 0.08 + rand() * 0.1, 0.35 + rand() * 0.5);
+    g.rotateY(rand() * Math.PI);
+    g.rotateZ((rand() - 0.5) * 0.25);
+    g.translate(px, gy + 0.06 + rand() * 0.3 * rh, pz);
+    push(DEBRIS.wood[(rand() * DEBRIS.wood.length) | 0], g);
+  }
+  // 木梁：灰褐长条，斜插
+  const nBeams = 5 + Math.floor(rand() * 5);
+  for (let i = 0; i < nBeams; i++) {
+    const a = rand() * Math.PI * 2, rr = rand() * R * 0.82;
+    const px = Math.cos(a) * rr * 0.8, pz = Math.sin(a) * rr * 0.8;
+    const g = new THREE.BoxGeometry(0.22 + rand() * 0.16, 1.6 + rand() * 2.2, 0.2 + rand() * 0.14);
+    g.rotateZ(0.5 + rand() * 1.0);
+    g.rotateY(rand() * Math.PI * 2);
+    g.translate(px, gy + 0.35 + rand() * 0.5 * rh, pz);
+    push(DEBRIS.wood[(rand() * DEBRIS.wood.length) | 0], g);
+  }
+  const group = new THREE.Group();
+  group.position.set(cx, 0, cz);
+  // 注意：上面几何体用了世界系坐标（含 gy），group 放原点即可
+  for (const [mat, geos] of byMat) {
+    let merged = null;
+    try { merged = mergeGeos(geos, false); } catch (e) { merged = null; }
+    if (merged) {
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.raycast = () => {};   // 废墟不参与测距
+      group.add(mesh);
+    }
+  }
+  scene.add(group);
+  return group;
+}
+
+// ── 建筑倒塌流程：终击触发 → 1 秒内浓烟全罩（2-3 倍房屋面积）→ 3-4s 前慢后快下沉 → 废墟中途升起 ──
+const collapsing = [];
+function startCollapse(d) {
+  d.alive = false;
+  grayifyProp(d, 0.55);   // 终击整体重度灰化
+  const dur = 3.2 + rand() * 0.8;   // 下沉 3-4s
+  const w = d.box.max.x - d.box.min.x, dp = d.box.max.z - d.box.min.z;
+  // ── 倾斜沉降式（需 ≥2 发击毁的建筑）：一侧沉降 100%、另一侧 30%，边降边倾斜 ──
+  // 随机倒塌方向 dir；低沉降侧（-dir）最终有一部分露在地面外；废墟偏移到完全沉降侧（+dir）
+  let tilt = null;
+  if (d.maxHp >= 2) {
+    const th = rand() * Math.PI * 2;
+    const dirX = Math.cos(th), dirZ = Math.sin(th);
+    const e = Math.abs(dirX) * (w / 2) + Math.abs(dirZ) * (dp / 2);   // 沿 dir 的半跨
+    const H = d.height;
+    const sinkLow = H * 0.3;                                          // 低沉降侧（露出侧）下沉量
+    const drop = H * 0.75;                                            // 两侧沉降差（0.3H → 1.05H）
+    const alpha = Math.asin(clamp(drop / (2 * e), 0, 1));             // 绕低侧边的终态倾角
+    // 支点 = 低沉降侧边缘（地面处）；旋转轴垂直于 dir，使 +dir 侧下沉
+    const pivot = new THREE.Object3D();
+    pivot.position.set(d.cx - dirX * e, d.group.position.y, d.cz - dirZ * e);
+    townGroup.add(pivot);
+    pivot.attach(d.group);                                            // 保持世界变换重挂到支点下
+    tilt = {
+      pivot, pLowY: pivot.position.y,          // 支点初始 y
+      axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(),
+      alpha, sinkLow,
+      dirX, dirZ, offE: e * 0.8,              // 废墟向完全沉降侧偏移量
+    };
+  }
+  collapsing.push({
+    d, t: 0, dur,
+    y0: d.group.position.y,
+    sink: d.height * 1.06,               // 完全沉入地下（纯沉降式）
+    tiltAxis: new THREE.Vector3(rand() - 0.5, 0, rand() - 0.5).normalize(),
+    tiltMax: 0.05 + rand() * 0.04,
+    tilt,                                 // null = 纯沉降式；对象 = 倾斜沉降式
+    dustT: 0, debrisT: 0,
+    rubble: null, riseK: 0,
+    sizeK: clamp(Math.max(w, dp) / 9, 0.65, 1.9),   // 补尘散布范围系数
+    span: Math.max(w, dp),                            // 房屋跨度（烟径基数）
+    w, dp,
+  });
+  // 起始爆响
+  audio.playExplosion(1.3, player ? clamp(player.root.position.distanceTo(d.group.position) / 800, 0, 1) : 0);
+  // ── 瞬间爆烟：1 秒内腾起大量多层烟雾，快速达到最高浓度 ──
+  // 烟团尺寸按房屋跨度绝对生成：初始=跨度×1.5，膨胀后=跨度×2-3 倍（大房大烟小房小烟）
+  const R = Math.max(w, dp);
+  const s0 = R * 1.5;                       // 初始烟径 = 跨度 × 1.5
+  const s1 = R * (2 + rand());              // 膨胀烟径 = 跨度 × 2-3
+  const burstN = Math.round((40 + rand() * 12) * clamp(w * dp / 110, 0.55, 2.1));   // 数量按占地面积
+  for (let i = 0; i < burstN; i++) {
+    const col = pickDust();
+    // 环形分布：建筑轮廓外 0-1.4 倍外扩（烟雾不被楼体遮挡）
+    const a = rand() * Math.PI * 2, rr = R * (0.55 + rand() * 1.35);
+    ps.spawn('smoke', {
+      x: d.cx + Math.cos(a) * rr, y: mapTerrainHeight(d.cx, d.cz) + 0.4 + rand() * 3.2, z: d.cz + Math.sin(a) * rr,
+      vx: (rand() - 0.5) * 4.6, vy: 1.2 + rand() * 2.8, vz: (rand() - 0.5) * 4.6,
+      life: 5.5 + rand() * 4, size0: s0 * (0.75 + rand() * 0.5), size1: s1 * (0.75 + rand() * 0.5),
+      alpha: 0.6, drag: 0.42, windK: 0.55, fadeIn: 0.08, sizeEase: 1.5,
+      c0: col.c0, c1: col.c1,
+    });
+  }
+  // 首波碎片：多点大爆发（大块近落 + 小块远飞，覆盖 2 倍房屋范围）
+  const gy = mapTerrainHeight(d.cx, d.cz);
+  {
+    const w2 = d.box.max.x - d.box.min.x, dp2 = d.box.max.z - d.box.min.z;
+    const span2 = Math.max(w2, dp2);
+    const areaK2 = clamp(w2 * dp2 / 110, 0.55, 2.1);
+    const total2 = Math.round(220 * areaK2);
+    const nB = Math.round(total2 * 0.3), nS = total2 - nB;
+    for (let i = 0; i < 6; i++) {
+      const px = d.cx + (rand() - 0.5) * span2 * 1.1;
+      const pz = d.cz + (rand() - 0.5) * span2 * 1.1;
+      const p = new THREE.Vector3(px, mapTerrainHeight(px, pz) + 1 + rand() * 1.5, pz);
+      effects._debrisBurst(p, Math.max(2, Math.round(nB / 6)), 5 + rand() * 2.5, { mats: DEBRIS.wood, size: 1.8, wood: true });
+      effects._debrisBurst(p, Math.max(3, Math.round(nS / 6)), 17 + rand() * 7, { mats: DEBRIS.wood, size: 0.5, wood: true });
+      effects._debrisBurst(p, 5, 11, { mats: DEBRIS.concrete, size: 0.55 });
+    }
+  }
+}
+function updateCollapsing(dt) {
+  for (let i = collapsing.length - 1; i >= 0; i--) {
+    const c = collapsing[i];
+    c.t += dt;
+    const k = Math.min(c.t / c.dur, 1);
+    const ease = Math.pow(k, 2.3);   // 前期慢后期快
+    if (c.tilt) {
+      // 倾斜沉降式：支点（低沉降侧边缘）下沉 0.3H，同时绕垂直于倒塌方向的轴倾斜
+      // +dir 侧最终沉降 1.05H 完全入地；-dir 侧只沉 0.3H，一部分墙体露在地面外
+      c.tilt.pivot.position.y = c.tilt.pLowY - c.tilt.sinkLow * ease;
+      c.tilt.pivot.quaternion.setFromAxisAngle(c.tilt.axis, c.tilt.alpha * ease);
+    } else {
+      // 纯沉降式：整体下沉 + 微倾（烟雾全罩后才开始明显下沉）
+      c.d.group.position.y = c.y0 - c.sink * ease;
+      c.d.group.quaternion.setFromAxisAngle(c.tiltAxis, c.tiltMax * ease);
+    }
+    // 废墟在倒塌中段从地面逐渐升起（覆盖倒塌后半程）；倾斜式偏移到完全沉降侧
+    if (!c.rubble && k > 0.38) {
+      c.rubble = buildRubblePile(c.d, c.tilt ? { ox: c.tilt.dirX * c.tilt.offE, oz: c.tilt.dirZ * c.tilt.offE } : null);
+      c.rubble.scale.y = 0.02;
+    }
+    if (c.rubble && c.riseK < 1) {
+      c.riseK = clamp((k - 0.38) / 0.5, 0, 1);
+      c.rubble.scale.y = 0.02 + 0.98 * (c.riseK * c.riseK * (3 - 2 * c.riseK));   // smoothstep 升起
+    }
+    // 持续尘云：高密度维持遮蔽（前 70% 时间最浓）；烟径按房屋跨度（初始×1.5 → 膨胀×2-2.5）
+    c.dustT -= dt;
+    if (c.dustT <= 0) {
+      c.dustT = k < 0.7 ? 0.06 : 0.12;   // 前期每 60ms 一波，后期渐疏
+      const px = c.d.cx + (rand() - 0.5) * c.w * 1.1;
+      const pz = c.d.cz + (rand() - 0.5) * c.dp * 1.1;
+      bigDustAbs(px, mapTerrainHeight(px, pz) + 0.8 + rand() * 2, pz, k < 0.7 ? 3 : 1, 11 * c.sizeK,
+        c.span * 1.5, c.span * (2 + rand() * 0.5));
+    }
+    // 碎片流：以木片为主，偶有小砖石
+    c.debrisT -= dt;
+    if (c.debrisT <= 0) {
+      c.debrisT = 0.13;
+      const px = c.d.cx + (rand() - 0.5) * c.w * 0.9;
+      const pz = c.d.cz + (rand() - 0.5) * c.dp * 0.9;
+      const p = new THREE.Vector3(px, mapTerrainHeight(px, pz) + 1 + rand() * 1.5, pz);
+      if (rand() < 0.75) effects._debrisBurst(p, 12 + Math.floor(rand() * 10), 9 + rand() * 9, { mats: DEBRIS.wood, size: 0.8, wood: true });
+      else effects._debrisBurst(p, 6 + Math.floor(rand() * 5), 8 + rand() * 6, { mats: DEBRIS.concrete, size: 0.5 });
+    }
+    if (k >= 1) {
+      // 倒塌完成。纯沉降式：移除建筑；倾斜沉降式：保留倾斜模型（低沉降侧露在地面外）
+      const off = c.tilt ? { ox: c.tilt.dirX * c.tilt.offE, oz: c.tilt.dirZ * c.tilt.offE } : null;
+      if (!c.tilt) townGroup.remove(c.d.group);
+      if (rand() < 0.12) {
+        // 废墟无持续烟尘，仅 12% 几率残留一簇小明火（放在废墟堆上）
+        const fx = c.d.cx + (off ? off.ox : 0) + (rand() - 0.5) * c.w * 0.5;
+        const fz = c.d.cz + (off ? off.oz : 0) + (rand() - 0.5) * c.dp * 0.5;
+        addPropFire(fx, mapTerrainHeight(fx, fz) + 0.25, fz, 10 + rand() * 6, 0.3, 'fire');
+      }
+      finalizeDestruction(c.d, c.d.rule.rubbleH, off);
+      collapsing.splice(i, 1);
+    }
+  }
+}
+
+// ── 落叶飞散：叶片 5cm×3cm，从树冠外侧飘散点快速上扬 → 阻力衰减 → 自然飘落扩散 ──
+function leafBurst(x, y, z, n, pine, canopyR = 2.5) {
+  // 飘散点分布在树冠外侧环形（每个叶片独立起点，扩散自然）
+  const p = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const a = rand() * Math.PI * 2;
+    const rr = canopyR * (0.8 + rand() * 0.5);           // 树冠外侧
+    p.set(x + Math.cos(a) * rr, y + (rand() - 0.5) * 1.2, z + Math.sin(a) * rr);
+    effects._debrisBurst(p, 1, 12 + rand() * 6, {
+      mats: pine ? DEBRIS.pineNeedle : DEBRIS.leaf,
+      leaf: true,            // 7.5cm×4.5cm 小叶片几何（×1.5）
+      leafScale: 1.5,
+      grav: 2.6,             // 飘落速度：整体 ~2.5s 内落地
+      drag: 3.0,             // 强阻力：初速快速衰减 → 上扬后马上转缓降
+      life: 3.0 + rand() * 1.2,
+    });
+  }
+  // 尘土伴随：树冠外侧同区域灰土小碎屑与叶子混飘
+  for (let i = 0; i < Math.max(4, (n / 4) | 0); i++) {
+    const a = rand() * Math.PI * 2;
+    const rr = canopyR * (0.85 + rand() * 0.45);
+    p.set(x + Math.cos(a) * rr, y + (rand() - 0.3) * 1.5, z + Math.sin(a) * rr);
+    effects._debrisBurst(p, 1, 8 + rand() * 4, {
+      mats: DEBRIS.dirt, size: 0.28,
+      grav: 2.2, drag: 2.8, life: 2.4 + rand() * 0.9,
+    });
+  }
+}
+
+// ── 树木倒伏：绕根部旋转倒下（非压扁），落点扬起烟尘 ──
+const fallingTrees = [];
+function fellTree(rec, dirX, dirZ) {
+  rec.hp = 0;
+  rec.alive = false;
+  const len = Math.hypot(dirX, dirZ) || 1;
+  fallingTrees.push({
+    rec, t: 0, dur: 0.85,
+    dx: dirX / len, dz: dirZ / len,
+  });
+}
+const _fq1 = new THREE.Quaternion(), _fq2 = new THREE.Quaternion(), _fAxis = new THREE.Vector3();
+function updateFallingTrees(dt) {
+  for (let i = fallingTrees.length - 1; i >= 0; i--) {
+    const f = fallingTrees[i];
+    const r = f.rec;
+    f.t += dt;
+    const k = Math.min(f.t / f.dur, 1);
+    const ease = k * k;   // 重力加速倒下
+    const ang = ease * 1.42;   // ~81°，不完全贴地
+    _fq1.setFromAxisAngle(UP, r.rot);
+    _fAxis.set(f.dz, 0, -f.dx);
+    _fq2.setFromAxisAngle(_fAxis, ang);
+    _fq2.multiply(_fq1);
+    _im.compose(_ip.set(r.x, r.y, r.z), _fq2, _is.setScalar(r.s));
+    r.mesh.setMatrixAt(r.i, _im);
+    r.mesh.instanceMatrix.needsUpdate = true;
+    if (k >= 1) {
+      // 落地：树冠处即时烟团 + 木屑 + 8-10s 持续烟尘源
+      const tipX = r.x + f.dx * r.srcH * 0.7, tipZ = r.z + f.dz * r.srcH * 0.7;
+      const ty = mapTerrainHeight(tipX, tipZ) + 0.5;
+      for (let s = 0; s < 4; s++) {
+        const col = pickDust();
+        ps.spawn('smoke', {
+          x: tipX + (rand() - 0.5) * 3, y: ty + rand() * 0.6, z: tipZ + (rand() - 0.5) * 3,
+          vx: f.dx * 1.2 + (rand() - 0.5), vy: 1 + rand(), vz: f.dz * 1.2 + (rand() - 0.5),
+          life: 3.5 + rand() * 2, size0: 2.5, size1: 11, alpha: 0.42, drag: 0.6, windK: 0.9,
+          fadeIn: 0.15, sizeEase: 1.7, c0: col.c0, c1: col.c1,
+        });
+      }
+      effects._debrisBurst(new THREE.Vector3(tipX, ty, tipZ), 7, 7, { mats: DEBRIS.wood, size: 0.5, wood: true });
+      // 落叶飞散：树冠处大量 + 沿树干中段少量（快速上扬后自然飘落）
+      const pine = r.type === 'pine';
+      const canopyR = r.s * 2.5;
+      leafBurst(tipX, ty, tipZ, 68 + Math.floor(rand() * 28), pine, canopyR);
+      leafBurst((r.x + tipX) / 2, ty + 0.6, (r.z + tipZ) / 2, 24 + Math.floor(rand() * 16), pine, canopyR * 0.8);
+      // 持续烟尘：倒伏树冠 + 树根两处，8-10s
+      addPropFire(tipX, ty - 0.3, tipZ, 3 + rand(), 0.6, 'smoke');
+      addPropFire(r.x, r.y, r.z, 2.5 + rand(), 0.4, 'smoke');
+      audio.playExplosion(0.18, 0.2);
+      fallingTrees.splice(i, 1);
+    }
+  }
+}
+
+// —— 电线杆倒伏（group 版）：绕根部 pivot 旋转倒下，只能被压倒、不可炮击 ——
+const fallingPylons = [];
+const _pq = new THREE.Quaternion(), _pAxis = new THREE.Vector3();
+function fellPylon(d, dirX, dirZ) {
+  d.hp = 0;
+  d.alive = false;
+  const len = Math.hypot(dirX, dirZ) || 1;
+  const g = d.group;
+  const pivot = new THREE.Group();
+  pivot.position.copy(g.position);
+  g.position.set(0, 0, 0);
+  townGroup.add(pivot);
+  pivot.add(g);
+  fallingPylons.push({ d, pivot, t: 0, dur: 0.95, dx: dirX / len, dz: dirZ / len });
+}
+function updateFallingPylons(dt) {
+  for (let i = fallingPylons.length - 1; i >= 0; i--) {
+    const f = fallingPylons[i];
+    f.t += dt;
+    const k = Math.min(f.t / f.dur, 1);
+    const ease = k * k;   // 重力加速倒下
+    _pAxis.set(f.dz, 0, -f.dx);
+    _pq.setFromAxisAngle(_pAxis, ease * 1.42);   // ~81°，不完全贴地
+    f.pivot.quaternion.copy(_pq);
+    if (k >= 1) {
+      // 落地：杆尖尘烟 + 碎屑
+      const tipX = f.pivot.position.x + f.dx * f.d.height * 0.85;
+      const tipZ = f.pivot.position.z + f.dz * f.d.height * 0.85;
+      const ty = mapTerrainHeight(tipX, tipZ) + 0.4;
+      for (let s = 0; s < 3; s++) {
+        const col = pickDust();
+        ps.spawn('smoke', {
+          x: tipX + (rand() - 0.5) * 2.5, y: ty + rand() * 0.5, z: tipZ + (rand() - 0.5) * 2.5,
+          vx: f.dx * 1 + (rand() - 0.5), vy: 0.9 + rand(), vz: f.dz * 1 + (rand() - 0.5),
+          life: 2.5 + rand() * 1.5, size0: 2, size1: 9, alpha: 0.4, drag: 0.6, windK: 0.9,
+          fadeIn: 0.12, sizeEase: 1.7, c0: col.c0, c1: col.c1,
+        });
+      }
+      effects._debrisBurst(new THREE.Vector3(tipX, ty, tipZ), 5, 6, { mats: DEBRIS.concrete, size: 0.35 });
+      audio.playExplosion(0.2, 0.25);
+      fallingPylons.splice(i, 1);
+    }
+  }
+}
+
+// —— 摧毁收尾：碰撞与废墟坡度处理（F3：<1.5m 废墟可通行+坡度；≥1.5m 保留阻挡） ——
+function finalizeDestruction(d, rh, off = null) {
+  const ox = off ? off.ox : 0, oz = off ? off.oz : 0;
+  const rk = d.kind === 'group' ? (RUBBLE_SCALE[d.type] || 1) : 1;   // 废墟范围倍率同步坡度场
+  if (d.obstacle) {
+    if (rh >= 1.5) d.obstacle.r *= 0.55;
+    else { d.obstacle.dead = true; rubbleFields.push({ x: (d.cx ?? d.x) + ox, z: (d.cz ?? d.z) + oz, r: d.radius * 1.15 * rk, h: rh }); }
+  } else if (d.kind === 'group') {
+    // 无碰撞体建筑也产生坡度
+    rubbleFields.push({ x: d.cx + ox, z: d.cz + oz, r: d.radius * 1.15 * rk, h: rh });
+  }
+}
+
+// —— 建筑碎片爆发：数量按房屋尺寸缩放（基础×3 / 终击×5），大块近落 + 小块远飞，散布覆盖 2 倍房屋 ——
+// MD 表格覆盖值（A组建筑效果表.md）：house01/02 手工标定，其余按公式
+const DEBRIS_TABLE = {
+  house01: { hit: [137, 34], final: [283, 135] },   // [木片总数, 砖石数]
+  house02: { hit: [126, 28], final: [429, 154] },
+};
+function buildingDebrisBurst(d, hitPos, last) {
+  const w = d.box.max.x - d.box.min.x, dp = d.box.max.z - d.box.min.z;
+  const span = Math.max(w, dp);
+  const areaK = clamp(w * dp / 110, 0.55, 2.1);                    // 占地系数：house03≈0.45→0.55 / house01≈1.2 / house02≈1.8
+  // 覆盖表优先；公式：基础量 48（×3）按面积缩放；终击 ×5
+  const ov = DEBRIS_TABLE[d.type];
+  let total, rockN;
+  if (ov) { total = ov[last ? 'final' : 'hit'][0]; rockN = ov[last ? 'final' : 'hit'][1]; }
+  else { total = Math.round((last ? 240 : 48) * areaK); rockN = Math.round((last ? 30 : 12) * areaK); }
+  const bigN = Math.round(total * (last ? 0.3 : 0.35));            // 大块：低速近处掉落
+  const smallN = total - bigN;                                      // 小块：高速远飞
+  // 弹着点本体一股 + 房屋范围内多点抛射（覆盖 2 倍房屋大小）
+  const pts = [hitPos.clone()];
+  const nPts = last ? 5 : 3;
+  for (let i = 0; i < nPts; i++) {
+    const px = d.cx + (rand() - 0.5) * span * 2 * 0.55;
+    const pz = d.cz + (rand() - 0.5) * span * 2 * 0.55;
+    pts.push(new THREE.Vector3(px, mapTerrainHeight(px, pz) + 1 + rand() * 1.6, pz));
+  }
+  for (const p of pts) {
+    effects._debrisBurst(p, Math.max(2, Math.round(bigN / pts.length)), 5 + rand() * 2.5, { mats: DEBRIS.wood, size: 1.8, wood: true });
+    effects._debrisBurst(p, Math.max(3, Math.round(smallN / pts.length)), 17 + rand() * 7, { mats: DEBRIS.wood, size: 0.5, wood: true });
+    effects._debrisBurst(p, Math.max(1, Math.round(rockN / pts.length)), last ? 12 : 8, { mats: DEBRIS.concrete, size: 0.55 });
+  }
+}
+
+// —— A 组建筑（适用倒塌系统）：house01/02/03、barn01/03、barrack01-04 ——
+const COLLAPSE_TYPES = new Set(['house01', 'house02', 'house03', 'barn01', 'barn03', 'barrack01', 'barrack02', 'barrack03', 'barrack04']);
+
+// —— 炮弹命中伤害：A 组建筑=灰化+包围烟+终击倒塌；其余物件=一般性毁坏（碎片+小爆，无倒塌烟雾） ——
+function damageDestructible(d, hitPos, shellType) {
+  if (!d.alive) return;
+  const isBld = d.kind === 'group' && COLLAPSE_TYPES.has(d.type);   // A 组建筑（倒塌系统）
+  // A 组建筑只有 HE 高爆弹能摧毁结构；AP/HEAT 只有效果不扣血（其他物件不区分弹种）
+  const isHE = shellType === undefined || shellType === 'he';
+  if (isBld && !isHE) {
+    // AP/HEAT 命中建筑：烟尘 + 少量碎屑效果，不灰化不扣血不倒塌
+    surroundSmoke(d, hitPos, false);
+    effects._debrisBurst(hitPos, 10, 8, { mats: DEBRIS.wood, size: 0.6, wood: true });
+    audio.playExplosion(0.45, player ? clamp(player.root.position.distanceTo(hitPos) / 800, 0, 1) : 0);
+    return;
+  }
+  d.hp--;
+  const last = d.hp <= 0;
+  const isTree = d.kind === 'inst' && (d.type === 'leaf' || d.type === 'pine');
+  const isFence = d.kind === 'inst' && d.type.startsWith('fence');
+  const isWood = isTree || isFence || (d.kind === 'inst' && d.type === 'wood_log');
+  const dist01 = player ? clamp(player.root.position.distanceTo(hitPos) / 800, 0, 1) : 0;
+
+  // 爆炸特效：A 组建筑命中不出火光（纯烟尘由 surroundSmoke 负责）；其余物件保留小型爆炸
+  if (!isBld) effects.explosion(hitPos, last ? 0.5 : 0.35);
+
+  // 碎片：以长条木片为主（建筑木质结构），砖石小块少量
+  if (isWood) {
+    // 围栏/柴堆/树：纯木片
+    effects._debrisBurst(hitPos, last ? 14 : 9, 8, { mats: DEBRIS.wood, size: 0.55, wood: true });
+  } else if (isBld) {
+    // A 组建筑：碎片量按房屋尺寸缩放（基础×3，终击×5），大块近落 + 小块远飞，爆炸范围 2 倍房屋
+    buildingDebrisBurst(d, hitPos, last);
+  } else {
+    // 其余物件（车/集装箱/金属件等）：一般性毁坏碎片
+    effects._debrisBurst(hitPos, last ? 8 : 5, 8, { mats: DEBRIS.concrete, size: 0.6 });
+  }
+
+  // 命中灰烟（灰土色，A 组建筑命中加量并推到弹着点外侧防止被楼体遮蔽）
+  const [ox, oz] = isBld ? hitOutward(d, hitPos) : [0, 0];
+  const ns = isBld ? (last ? 8 : 6) : 2;
+  for (let i = 0; i < ns; i++) {
+    const col = pickDust();
+    const off = isBld ? 2 + rand() * 4 : 0;
+    ps.spawn('smoke', {
+      x: hitPos.x + ox * off + (rand() - 0.5) * 4, y: hitPos.y + rand() * 2, z: hitPos.z + oz * off + (rand() - 0.5) * 4,
+      vx: (rand() - 0.5) * 2.8, vy: 1.8 + rand() * 2.6, vz: (rand() - 0.5) * 2.8,
+      life: 3 + rand() * 3, size0: 3.5, size1: 14 + rand() * 10, alpha: 0.42, drag: 0.4, windK: 0.8,
+      fadeIn: 0.15, sizeEase: 1.7, c0: col.c0, c1: col.c1,
+    });
+  }
+  audio.playExplosion(last ? (isBld ? 0.9 : 0.5) : 0.45, dist01);
+
+  if (isBld) {
+    // A 组建筑命中：整体灰化 + 大量灰/灰褐烟雾包围房屋 + 木片碎屑（不着火、不下沉）
+    grayifyProp(d, last ? 0.55 : 0.3);
+    surroundSmoke(d, hitPos, last);
+    if (last) startCollapse(d);   // 终击才进入倒塌流程
+  } else if (d.kind === 'group') {
+    // 其余 group 物件（车/集装箱/水塔等）：一般性毁坏——压扁成残骸，无倒塌烟雾
+    if (last) {
+      d.alive = false;
+      squashGroupProp(d, d.rule.rubbleH);
+      finalizeDestruction(d, d.rule.rubbleH);
+    }
+  } else if (last) {
+    d.alive = false;
+    if (isTree) {
+      // 炮击毁树：直接倒下（随机方向），树冠先炸开一波落叶
+      const th = rand() * Math.PI * 2;
+      leafBurst(d.x, d.y + d.srcH * 0.55, d.z, 45 + Math.floor(rand() * 20), d.type === 'pine', d.s * 2.5);
+      fellTree(d, Math.cos(th), Math.sin(th));
+      effects._debrisBurst(hitPos, 6, 8, { mats: DEBRIS.wood, size: 0.55, wood: true });
+      // 炮击毁树：即时烟团 + 8-10s 持续烟尘
+      for (let s = 0; s < 3; s++) {
+        const col = pickDust();
+        ps.spawn('smoke', {
+          x: d.x + (rand() - 0.5) * 2, y: d.y + 0.8 + rand(), z: d.z + (rand() - 0.5) * 2,
+          vx: (rand() - 0.5) * 1.5, vy: 1.4 + rand(), vz: (rand() - 0.5) * 1.5,
+          life: 3.5 + rand() * 2, size0: 2.2, size1: 10, alpha: 0.42, drag: 0.6, windK: 0.9,
+          fadeIn: 0.15, sizeEase: 1.7, c0: col.c0, c1: col.c1,
+        });
+      }
+      addPropFire(d.x, d.y, d.z, 3 + rand(), 0.55, 'smoke');
+    } else {
+      squashInstProp(d, d.rule.rubbleH);
+    }
+    finalizeDestruction(d, isTree ? 0.2 : d.rule.rubbleH);
+  }
+}
+
+// —— 履带压毁（每帧检查车体矩形接触；只压接触到的物件/围栏节） ——
+const _cfw = new THREE.Vector3(), _crt = new THREE.Vector3();
+function crushCheck() {
+  if (!player || player.destroyed || paused) return;
+  _cfw.set(0, 0, -1).applyQuaternion(player.root.quaternion);
+  _crt.set(1, 0, 0).applyQuaternion(player.root.quaternion);
+  const hl = (player.cfg.dims.length || 7) / 2 + 0.6;
+  const hw = (player.cfg.dims.width || 3.4) / 2 + 0.5;
+  const px = player.root.position.x, pz = player.root.position.z;
+  for (const d of destructibles) {
+    if (!d.alive || d.rule.crushH === undefined) continue;
+    const cx = d.kind === 'group' ? d.cx : d.x;
+    const cz = d.kind === 'group' ? d.cz : d.z;
+    const dx = cx - px, dz = cz - pz;
+    if (dx * dx + dz * dz > 3600) continue;   // 60m 粗筛
+    // 车体局部坐标
+    const lx = dx * _crt.x + dz * _crt.z;
+    const lz = -dx * _cfw.x - dz * _cfw.z;
+    const rr = Math.min(d.radius || 1, 2.2);
+    if (Math.abs(lx) > hw + rr || Math.abs(lz) > hl + rr) continue;
+    // 压毁
+    const rh = d.rule.crushH;
+    const isTree = d.kind === 'inst' && (d.type === 'leaf' || d.type === 'pine');
+    const isPylon = d.kind === 'group' && d.type === 'pylon01';
+    const isFence = d.kind === 'inst' && d.type.startsWith('fence');
+    const hp = new THREE.Vector3(cx, mapTerrainHeight(cx, cz) + 0.5, cz);
+    // ── 压毁阻力：碾过瞬间减速 + 相机震动（等级：轻0.10 / 中0.30 / 重0.45） ──
+    const drag = d.rule.drag || 0.10;
+    if (Math.abs(player.speed) > 0.4) player.speed *= (1 - drag);
+    rig.addShake(0.12 + drag * 0.55);
+    if (isTree) {
+      // 树：倒下（朝远离坦克方向），非压扁
+      fellTree(d, dx, dz);
+    } else if (isPylon) {
+      // 电线杆：绕根部倒下（朝远离坦克方向），非压扁
+      fellPylon(d, dx, dz);
+    } else {
+      d.hp = 0;
+      d.alive = false;
+      if (d.kind === 'group') { grayifyProp(d, 0.5); squashGroupProp(d, rh); }
+      else squashInstProp(d, rh);
+      finalizeDestruction(d, rh);
+    }
+    // 压毁特效：长条木片（围栏/树/柴堆纯木片）+ 尘土 + 轻响
+    effects._debrisBurst(hp, isTree || isFence ? 8 : 5, 6, { mats: isTree || isFence ? DEBRIS.wood : DEBRIS.concrete, size: 0.45, wood: isTree || isFence });
+    ps.spawn('smoke', {
+      x: cx, y: hp.y + 0.4, z: cz, vx: 0, vy: 1.3, vz: 0,
+      life: 1.6, size0: 1.5, size1: 5, alpha: 0.3, drag: 0.5, fadeIn: 0.12,
+      c0: [0.66, 0.62, 0.55], c1: [0.55, 0.52, 0.47],
+    });
+    audio.playExplosion(0.15 + drag * 0.5, clamp(Math.hypot(px - cx, pz - cz) / 500, 0, 1));
+  }
+}
+
+// —— 炮弹与物件求交（线段-AABB / 线段-圆柱，防高速隧穿） ——
+function segBoxHit(x0, y0, z0, x1, y1, z1, minx, miny, minz, maxx, maxy, maxz) {
+  let tmin = 0, tmax = 1;
+  const ax = [x0, y0, z0], bx = [x1, y1, z1];
+  const mn = [minx, miny, minz], mx = [maxx, maxy, maxz];
+  for (let a = 0; a < 3; a++) {
+    const d = bx[a] - ax[a];
+    if (Math.abs(d) < 1e-9) {
+      if (ax[a] < mn[a] || ax[a] > mx[a]) return false;
+    } else {
+      let t1 = (mn[a] - ax[a]) / d, t2 = (mx[a] - ax[a]) / d;
+      if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return false;
+    }
+  }
+  return true;
+}
+
+function segCylHit(x0, y0, z0, x1, y1, z1, cx, cz, r, y0c, y1c) {
+  const dx = x1 - x0, dz = z1 - z0;
+  const fx = x0 - cx, fz = z0 - cz;
+  const a = dx * dx + dz * dz;
+  if (a < 1e-9) return fx * fx + fz * fz <= r * r && y0 >= y0c && y0 <= y1c;
+  const b = 2 * (fx * dx + fz * dz), c = fx * fx + fz * fz - r * r;
+  if (c > 0) {   // 起点在圆外：求线段与圆交点
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return false;
+    const t = (-b - Math.sqrt(disc)) / (2 * a);
+    if (t < 0 || t > 1) return false;
+    const hy = y0 + (y1 - y0) * t;
+    return hy >= y0c && hy <= y1c;
+  }
+  return y0 >= y0c && y0 <= y1c;   // 起点已在圆内
+}
+
+// shell.js 可选钩子：命中返回 true（炮弹爆炸销毁）；第三参 s = 炮弹对象（取弹种）
+// 围栏 / 电线杆：不可被炮弹命中（炮弹直接穿过），只能被履带压毁
+world.onShellHitDestructible = (prev, pos, s) => {
+  const mx = (prev.x + pos.x) / 2, mz = (prev.z + pos.z) / 2;
+  const step = Math.hypot(pos.x - prev.x, pos.z - prev.z) + 1;
+  for (const d of destructibles) {
+    if (!d.alive) continue;
+    if (d.kind === 'inst' && d.type.startsWith('fence')) continue;   // 围栏：穿过
+    if (d.kind === 'group' && d.type === 'pylon01') continue;        // 电线杆：穿过
+    if (d.kind === 'group') {
+      const rr = d.radius + step;
+      if (Math.abs(d.cx - mx) > rr || Math.abs(d.cz - mz) > rr) continue;
+      if (segBoxHit(prev.x, prev.y, prev.z, pos.x, pos.y, pos.z,
+        d.box.min.x, d.box.min.y, d.box.min.z, d.box.max.x, d.box.max.y, d.box.max.z)) {
+        damageDestructible(d, pos, s.shellType);
+        return true;
+      }
+    } else {
+      const rr = (d.radius || 1) + step;
+      if (Math.abs(d.x - mx) > rr || Math.abs(d.z - mz) > rr) continue;
+      if (d.cyl) {
+        if (segCylHit(prev.x, prev.y, prev.z, pos.x, pos.y, pos.z, d.x, d.z, d.cr, d.y, d.y + d.srcH)) {
+          damageDestructible(d, pos);
+          return true;
+        }
+      } else if (segBoxHit(prev.x, prev.y, prev.z, pos.x, pos.y, pos.z,
+        d.minx, d.miny, d.minz, d.maxx, d.maxy, d.maxz)) {
+        damageDestructible(d, pos);
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+// ═══════════════════════ 游戏系统装配（与 main.js 战斗一致） ═══════════════════════
+const input = new Input(canvas);
+const ps = new ParticleSystem(scene);
+const effects = new Effects(scene, ps, audio, mapTerrainHeight);
+const shells = new ShellManager(scene, effects, audio, world);
+const smoke = new SmokeManager(scene);
+const rig = new CameraRig(camera, mapTerrainHeight);
+const raycaster = new THREE.Raycaster();
+const rayDir = new THREE.Vector3();
+
+let player = null;
+let trackMarks = null;
+let paused = false;
+let started = false;
+let throttleSmooth = 0, steerSmooth = 0;
+let prevReloading = false;
+let prevMgFire = false;
+let aimDist = null;
+
+// 出生点：南公路上，朝北驶向镇中心
+const SPAWN = { x: 0, z: -150, heading: 0 };
+
+function spawnPlayer() {
+  if (player) { scene.remove(player.root); player.dispose(); }
+  player = new Tank(TANKS[tankKey], tankAsset.scene.clone(true), world);
+  player.isPlayer = true;
+  player.place(SPAWN.x, SPAWN.z, THREE.MathUtils.radToDeg(SPAWN.heading));
+  scene.add(player.root);
+  shells.tanks = [player];
+  if (trackMarks) { trackMarks.dispose(); trackMarks = null; }
+  trackMarks = new TrackMarks(scene, world);
+  rig.attach(player);
+  buildAmmoPanel();
+}
+
+// ═══════════════════════ 玩家操控（逐行复刻 main.js _playerControl） ═══════════════════════
+function playerControl(dt) {
+  const p = player;
+  if (!p) return;
+
+  // ── 油门（压下行程平滑 + 惯性滑行） ──
+  let throttle = 0, steer = 0;
+  if (input.key('KeyW') || input.key('ArrowUp')) throttle += 1;
+  if (input.key('KeyS') || input.key('ArrowDown')) throttle -= 1;
+  if (input.key('KeyA') || input.key('ArrowLeft')) steer += 1;
+  if (input.key('KeyD') || input.key('ArrowRight')) steer -= 1;
+  throttleSmooth = damp(throttleSmooth, throttle, 5, dt);
+  if (Math.abs(throttleSmooth) < 0.02 && throttle === 0) throttleSmooth = 0;
+  steerSmooth = damp(steerSmooth, steer, 5, dt);
+
+  // ── 观瞄（鼠标）；镜内灵敏度随变倍降低 ──
+  const sens = rig.aiming ? 0.00095 / rig.zoomMag : 0.0021;
+  const { dx, dy, wheel } = input.consumeMouse();
+  rig.addAim(dx * sens, dy * sens);
+  if (wheel !== 0) {
+    if (rig.aiming) rig.zoomAim(wheel);
+    else rig.zoom(wheel);
+  }
+  rig.setAimMode(input.aiming);
+
+  p.drive(dt, clamp(throttleSmooth, -1, 1), clamp(steerSmooth, -1, 1), input.key('Space'));
+
+  // 炮塔伺服追踪准星目标点（含弹道补偿）
+  p.aimAt(rig.aimTarget);
+  p.updateTurret(dt);
+
+  // ── 机枪（F 手动；地图测试无敌人，M 自动无目标） ──
+  if (p.cfg.mg && p.mgGroup) {
+    const mHeld = input.key('KeyM');
+    if (mHeld && !playerControl._mgLatch) message('机枪自动射击：本图无敌方目标');
+    playerControl._mgLatch = mHeld;
+    p.mgTimer -= dt;
+    let mgFire = false;
+    if (input.key('KeyF')) mgFire = true;
+    if (mgFire && !prevMgFire) audio.startMGLoop();
+    if (!mgFire && prevMgFire) audio.stopMGLoop();
+    prevMgFire = mgFire;
+    if (mgFire && p.mgTimer <= 0 && p.mgAmmo > 0) {
+      p.mgTimer = 1 / p.cfg.mg.rate;
+      p.mgAmmo--;
+      p.getMgMuzzle(_v2, _v3, null);
+      const dd = p.cfg.mg.dispersion;
+      _v3.x += (Math.random() * 2 - 1) * dd; _v3.y += (Math.random() * 2 - 1) * dd; _v3.z += (Math.random() * 2 - 1) * dd;
+      _v3.normalize();
+      effects.mgTracer(_v2, _v3, p.cfg.mg.range);
+      effects.mgMuzzleFlash(_v2, _v3);
+      audio.playMG();
+      _v1.copy(_v2).addScaledVector(_v3, -0.6);
+      _v1.y += 0.2;
+      effects.ejectCasing(_v1, _v3, p.cfg.mg.casingType || 'mg');
+    }
+  }
+  p.updateFireControl(dt);
+  if (p.smokeCooldown > 0) p.smokeCooldown -= dt;
+
+  // ── 开火 ──
+  if (input.consumeFire()) {
+    if (p.readyToFire()) {
+      const shot = p.fire();
+      shells.fire(shot);
+      _v2.crossVectors(shot.dir, UP);
+      if (_v2.lengthSq() < 1e-6) _v2.set(1, 0, 0);
+      effects.muzzleBlast(shot.pos, shot.dir, _v2.normalize());
+      rig.addShake(0.5);
+      rig.addRecoil(1);
+      if (rig.aiming) { rig.addAimKick(0.022); scopeFlash(); }
+      audio.playFire(1, rig.aiming);
+      // 炮弹抛壳：炮塔顶部靠后，延迟0.8-1.2秒（与 main.js 一致）
+      {
+        const ep = new THREE.Vector3().copy(p.root.position);
+        ep.y += p.cfg.dims.turretTop + 0.3;
+        ep.addScaledVector(shot.dir, -1.0);
+        const ed = shot.dir.clone();
+        const es = _v2.clone();
+        setTimeout(() => effects.ejectCasing(ep, ed, 'cannon', es), 800 + Math.random() * 400);
+      }
+    } else {
+      message('装填中…');
+    }
+  }
+  // 装填完成提示音
+  const reloading = p.reload > 0;
+  if (prevReloading && !reloading) audio.playReloaded();
+  prevReloading = reloading;
+
+  // 发动机音随转速
+  const rpm = Math.min(Math.abs(p.speed) / p.cfg.maxSpeedForward + Math.abs(throttle) * 0.25, 1);
+  audio.setEngine(rpm, Math.abs(throttle));
+}
+
+// ═══════════════════════ 测距（复刻 main.js _updateRanging，敌坦求交换成布景求交） ═══════════════════════
+function updateRanging() {
+  aimDist = null;
+  if (!player) return;
+  const origin = camera.position;
+  const dir = rig.aimDirection(rayDir);
+  let best = 1600;
+  // 建筑求交（地图测试版：射线打布景网格）
+  raycaster.set(origin, dir);
+  raycaster.far = 1600;
+  const hits = raycaster.intersectObject(townGroup, true);
+  if (hits.length && hits[0].distance < best) best = hits[0].distance;
+  // 地形步进
+  for (let d = 12; d < best; d += 3) {
+    _v1.copy(origin).addScaledVector(dir, d);
+    if (_v1.y < mapTerrainHeight(_v1.x, _v1.z)) { best = d; break; }
+  }
+  if (best < 1600) {
+    rig.aimTarget.copy(origin).addScaledVector(dir, best);
+    aimDist = best;
+  } else {
+    rig.aimTarget.copy(rig.farPoint);
+  }
+}
+
+// ═══════════════════════ 行驶特效（复刻 main.js _driveEffects） ═══════════════════════
+function driveEffects(t, dt) {
+  if (t.destroyed) return;
+  const sp = Math.abs(t.speed);
+  t.dustTimer -= dt;
+  if (sp > 2 && t.dustTimer <= 0) {
+    t.dustTimer = 0.05 - Math.min(sp / 40, 1) * 0.03;
+    for (const tl of t.cfg.trackLocal) {
+      _v1.fromArray(tl);
+      t.model.localToWorld(_v1);
+      _v1.y = mapTerrainHeight(_v1.x, _v1.z) + 0.4;
+      effects.trackDust(_v1, Math.min(sp / 18, 1));
+    }
+  }
+  t.exhaustTimer -= dt;
+  const thr = Math.abs(t.throttle ?? 0);
+  const spdN = Math.min(sp / t.cfg.maxSpeed, 1);
+  const starting = thr > 0.3 && sp < 5;
+  t.startK += ((starting ? 1 : 0) - t.startK) * Math.min(1, dt * (starting ? 6 : 0.8));
+  const steerLoad = Math.abs(t.steer ?? 0);
+  const dark = Math.min(1, 0.15 + thr * 0.3 * (1 - spdN * 0.6) + t.startK * 0.7 + steerLoad * 0.25);
+  const load = Math.min(thr + sp / 30 + steerLoad * 0.35, 1);
+  if (t.exhaustTimer <= 0 && (load > 0.15 || sp > 1)) {
+    t.exhaustTimer = t.startK > 0.5 ? 0.06 : 0.09;
+    const turbine = t.cfg.engineType === 'turbine';
+    for (const el of t.cfg.exhaustLocal) {
+      _v1.fromArray(el);
+      t.model.localToWorld(_v1);
+      effects.exhaustPuff(_v1, load, dark, turbine);
+    }
+  }
+}
+
+// ═══════════════════════ HUD ═══════════════════════
+const el = (id) => document.getElementById(id);
+const retRing = el('retRing'), rangeText = el('rangeText');
+const reloadBar = el('reloadBar'), reloadText = el('reloadText');
+const ammoPanel = el('ammoPanel'), statusPanel = el('statusPanel');
+const scopeOverlay = el('scopeOverlay'), scopeZoom = el('scopeZoom');
+const aimText = el('aimText'), gsDisp = el('gsDisp'), gsFlash = el('scopeFlash');
+const msgBar = el('msgBar');
+
+// 镜内开火白闪（复刻 ui.js scopeFlash）
+function scopeFlash() {
+  gsFlash.classList.remove('show');
+  void gsFlash.offsetWidth;
+  gsFlash.classList.add('show');
+}
+let msgTimer = null;
+
+function message(text) {
+  msgBar.textContent = text;
+  msgBar.style.opacity = 1;
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => { msgBar.style.opacity = 0; }, 1600);
+}
+
+function buildAmmoPanel() {
+  const p = player;
+  const rows = [
+    ['ap', '1'], ['heat', '2'], ['he', '3'],
+  ].map(([type, key]) => {
+    const def = SHELL_TYPES[type];
+    const n = p.shellPool[type] ?? 0;
+    const sel = p.shellType === type ? 'sel' : (n > 0 ? '' : 'dim');
+    return `<div class="${sel}">${key} ${def.name} ×${n}</div>`;
+  }).join('');
+  const mg = p.cfg.mg ? `<div>F 机枪 ×${p.mgAmmo}</div>` : '';
+  ammoPanel.innerHTML = rows + mg;
+}
+
+function updateHUD() {
+  const p = player;
+  if (!p) return;
+
+  // 散布圈（公式复刻 main.js）
+  const fovRad = camera.fov * Math.PI / 180;
+  const dispPx = Math.tan(p.dispersion) / Math.tan(fovRad / 2) * (innerHeight / 2);
+  const ringSize = clamp(30 + dispPx * 2, 30, 300);
+  retRing.style.width = retRing.style.height = `${ringSize}px`;
+
+  // 瞄准缩圈进度（公式复刻 main.js：aimFrac ≥ 0.985 判定已瞄准）
+  const minD = p.cfg.dispersion;
+  const aimFrac = clamp(1 - (p.dispersion - minD) / (minD * 4), 0, 1);
+  const aimed = aimFrac >= 0.985 && !p.destroyed;
+  retRing.classList.toggle('aimed', aimed);
+  aimText.textContent = aimed ? '已瞄准' : `缩圈 ${Math.round(aimFrac * 100)}%`;
+  aimText.classList.toggle('aimed', aimed);
+
+  // 测距
+  rangeText.textContent = aimDist != null ? `${Math.round(aimDist)} m` : '';
+
+  // 狙击镜
+  scopeOverlay.classList.toggle('show', rig.aiming);
+  if (rig.aiming) {
+    scopeZoom.textContent = `×${(CAMERA.fov / rig.aimFovEff()).toFixed(1)}`;
+    // 镜内散布虚线圈：用 aimFovEff 换算散布角直径（公式复刻 main.js）
+    const aimFovRad = rig.aimFovEff() * Math.PI / 180;
+    const gsD = clamp(Math.tan(p.dispersion) / Math.tan(aimFovRad / 2) * innerHeight, 8, 700);
+    gsDisp.style.width = gsDisp.style.height = `${gsD}px`;
+  }
+
+  // 装填
+  const reloadFrac = 1 - Math.max(p.reload, 0) / p.cfg.reloadTime;
+  reloadBar.style.width = `${reloadFrac * 100}%`;
+  reloadBar.style.background = reloadFrac >= 1 ? '#8fb073' : '#c8a24a';
+  reloadText.textContent = reloadFrac >= 1 ? '就绪' : `装填 ${Math.ceil(p.reload * 10) / 10}s`;
+
+  // 弹药（数字变化时刷新）
+  if (updateHUD._ammoKey !== `${p.shellType}:${p.shellPool.ap},${p.shellPool.heat},${p.shellPool.he}:${p.mgAmmo}`) {
+    updateHUD._ammoKey = `${p.shellType}:${p.shellPool.ap},${p.shellPool.heat},${p.shellPool.he}:${p.mgAmmo}`;
+    buildAmmoPanel();
+  }
+
+  // 状态
+  statusPanel.innerHTML =
+    `${p.cfg.name}<br>` +
+    `速度 <span>${Math.round(Math.abs(p.speed) * 3.6)}</span> km/h · 挡位 <span>${p.speed < -0.3 ? 'R' : (Math.abs(p.speed) < 0.3 ? 'N' : 'D')}</span><br>` +
+    `烟雾弹 <span>${p.smokeAmmo}/3</span> · 维修 <span>${p.consumables.repair}</span> · 灭火 <span>${p.consumables.ext}</span><br>` +
+    `坐标 <span>${Math.round(p.pos.x)}, ${Math.round(p.pos.z)}</span>`;
+}
+
+// ═══════════════════════ 小地图 ═══════════════════════
+const mmCanvas = document.getElementById('minimap');
+const mmCtx = mmCanvas.getContext('2d');
+let mmStatic = null;
+const w2m = (w) => (w + 1000) * 0.09;
+
+function buildMinimapStatic() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 180;
+  const g = c.getContext('2d');
+  g.fillStyle = '#1d2a1e';
+  g.fillRect(0, 0, 180, 180);
+  g.strokeStyle = 'rgba(140,150,120,0.35)';
+  g.setLineDash([3, 3]);
+  g.strokeRect(w2m(-300), w2m(-300), 600 * 0.09, 600 * 0.09);
+  g.setLineDash([]);
+  g.strokeStyle = '#555c60';
+  g.lineWidth = 3;
+  g.beginPath(); g.moveTo(w2m(-1000), w2m(0)); g.lineTo(w2m(1000), w2m(0)); g.stroke();
+  g.beginPath(); g.moveTo(w2m(0), w2m(-1000)); g.lineTo(w2m(0), w2m(1000)); g.stroke();
+  g.fillStyle = '#8a7a5a';
+  for (const b of mapBoxes) {
+    g.fillRect(w2m(b.x - b.w / 2), w2m(b.z - b.d / 2), Math.max(2, b.w * 0.09), Math.max(2, b.d * 0.09));
+  }
+  g.strokeStyle = '#3a4a3c';
+  g.lineWidth = 1;
+  g.strokeRect(0.5, 0.5, 179, 179);
+  mmStatic = c;
+}
+
+function drawMinimap() {
+  if (!mmStatic || !player) return;
+  mmCtx.drawImage(mmStatic, 0, 0);
+  const mx = w2m(player.pos.x), my = w2m(player.pos.z);
+  mmCtx.save();
+  mmCtx.translate(mx, my);
+  mmCtx.rotate(-player.heading + Math.PI);
+  mmCtx.fillStyle = '#ffd24a';
+  mmCtx.beginPath();
+  mmCtx.moveTo(0, -5); mmCtx.lineTo(3.5, 4); mmCtx.lineTo(-3.5, 4);
+  mmCtx.closePath();
+  mmCtx.fill();
+  mmCtx.restore();
+  // 观瞄方向线
+  mmCtx.strokeStyle = 'rgba(255,210,74,0.5)';
+  mmCtx.lineWidth = 1;
+  mmCtx.beginPath();
+  mmCtx.moveTo(mx, my);
+  mmCtx.lineTo(mx + Math.sin(rig.aimYaw) * 16, my - Math.cos(rig.aimYaw) * 16);
+  mmCtx.stroke();
+}
+
+// ═══════════════════════ 暂停（复刻 main.js _pause/_resume） ═══════════════════════
+function pause() {
+  paused = true;
+  input.releaseLock();
+  audio.stopEngine();
+  audio.stopMGLoop();
+  prevMgFire = false;
+  el('pausePanel').classList.add('show');
+}
+function resume() {
+  paused = false;
+  audio.resumeBGM();
+  el('pausePanel').classList.remove('show');
+  input.requestLock();
+}
+
+// ═══════════════════════ 按键（复刻 main.js onKeyDown 战斗分支） ═══════════════════════
+input.onKeyDown = (code) => {
+  if (!started || paused) {
+    if (code === 'Escape' && started && paused) resume();
+    return;
+  }
+  if (code === 'KeyC') rig.toggleOrbit();
+  if (code === 'KeyG' && player) {
+    if (player.smokeAmmo <= 0) { message('烟雾弹已耗尽'); return; }
+    if (player.smokeCooldown > 0) return;
+    if (smoke.fire(player)) {
+      player.smokeAmmo--;
+      player.smokeCooldown = 2;
+      message(`烟雾弹发射 (${player.smokeAmmo} 次剩余)`);
+      audio.playSmokeLaunch();
+    }
+  }
+  if (code === 'Digit1') switchShell('ap');
+  if (code === 'Digit2') switchShell('heat');
+  if (code === 'Digit3') switchShell('he');
+  if (code === 'KeyR' && player) {
+    if (player.consumables.repair > 0) { if (player.useRepairKit()) message('维修包：模块已修复'); else message('无受损模块'); }
+    else message('维修包已用完');
+  }
+  if (code === 'KeyT' && player) {
+    if (player.consumables.ext > 0) { if (player.useExtinguisher()) message('灭火器：火焰已扑灭'); else message('未起火'); }
+    else message('灭火器已用完');
+  }
+  if (code === 'Escape') pause();
+};
+
+function switchShell(type) {
+  const p = player;
+  if (!p || p.destroyed) return;
+  const def = SHELL_TYPES[type];
+  if (!def || p.shellType === type) return;
+  if (p.shellPool[type] <= 0) { message(`${def.full}已耗尽`); return; }
+  if (p.switchShell(type)) message(`切换 ${def.full} ${def.name}`);
+}
+
+// ═══════════════════════ 主循环（复刻 main.js _frame 战斗分支） ═══════════════════════
+const clock = new THREE.Timer();
+let ambientTimer = 0;
+
+function frame() {
+  clock.update();
+  const dt = Math.min(clock.getDelta(), 0.05);
+  skyMat.uniforms.uTime.value += dt;            // fbm 云层缓慢漂移（shader 内乘 0.003-0.008 系数）
+
+  if (player && !paused) {
+    playerControl(dt);
+    player.update(dt, effects, audio);
+    if (trackMarks) { trackMarks.trackTank(player, dt); trackMarks.update(dt); }
+    crushCheck();   // 履带压毁围栏/小件/树木
+    rig.update(dt);
+    if (effects.shakeAmount > 0.01) rig.shake = Math.max(rig.shake, effects.shakeAmount * 0.8);
+    updateRanging();
+    driveEffects(player, dt);
+    updateHUD();
+    drawMinimap();
+    world.trackShadow(player.root.position);
+  } else {
+    world.trackShadow(camera.position);
+  }
+
+  // 远景战场氛围烟柱（复刻 main.js）
+  ambientTimer -= dt;
+  if (ambientTimer <= 0) {
+    ambientTimer = 2.5 + Math.random() * 4;
+    const a = Math.random() * Math.PI * 2, r = 260 + Math.random() * 260;
+    const x = Math.sin(a) * r, z = Math.cos(a) * r;
+    const y = mapTerrainHeight(x, z);
+    for (let i = 0; i < 6; i++) {
+      ps.spawn('smoke', {
+        x: x + (Math.random() - 0.5) * 8, y: y + Math.random() * 10, z: z + (Math.random() - 0.5) * 8,
+        vx: 1 + Math.random(), vy: 3 + Math.random() * 3, vz: (Math.random() - 0.5),
+        life: 3 + Math.random() * 3, size0: 6, size1: 18, alpha: 0.16, drag: 0.3,
+      });
+    }
+  }
+
+  if (!paused) {
+    smoke.update(dt);
+    shells.update(dt);
+    effects.update(dt);
+    ps.update(dt);
+    updateCollapsing(dt);   // 建筑倒塌动画（下沉→废墟）
+    updateFallingTrees(dt); // 树木倒伏动画
+    updateFallingPylons(dt); // 电线杆倒伏动画
+    updatePropFires(dt);    // 建筑火点（火焰+灰烟）
+  }
+  // 粒子点大小随相机 FoV（狙击变倍时粒子保持世界尺寸，与 main.js 一致）
+  ps.setFov(camera.fov, innerHeight);
+  renderer.render(scene, camera);
+}
+
+// ═══════════════════════ 资源加载与启动 ═══════════════════════
+const manager = new THREE.LoadingManager();
+const barEl = el('bar'), loadTextEl = el('loadText');
+manager.onProgress = (u, l, t) => {
+  barEl.style.width = `${(l / t) * 100}%`;
+  loadTextEl.textContent = `正在载入模型资源… ${l}/${t}`;
+};
+manager.onError = (u) => { loadTextEl.textContent = `加载失败: ${u}`; };
+
+const loader = new GLTFLoader(manager);
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('./vendor/three/jsm/libs/draco/');
+loader.setDRACOLoader(dracoLoader);
+loader.register((parser) => new GLTFPBRSpecGlossExt(parser));
+const load = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
+
+// 坦克选择：?tank=t-90m3|leopard_2a7|...（默认 t-90m3）
+const params = new URLSearchParams(location.search);
+const tankKey = TANKS[params.get('tank')] ? params.get('tank') : 't-90m3';
+let tankAsset = null;
+
+(async () => {
+  try {
+    const [buildingsG, leafG, pineG, rockG, rock2G, logG, tankG] = await Promise.all([
+      load('houseModel/town_kit.glb'),
+      load('houseModel/objects/leaf_tree.glb'),
+      load('houseModel/objects/pine_tree.glb'),
+      load('houseModel/objects/rock.glb'),
+      load('houseModel/objects/rock2.glb'),
+      load('houseModel/objects/wood_log.glb'),
+      load(`model/${TANKS[tankKey].model.replace('model/', '')}`),
+    ]);
+    tankAsset = tankG;
+
+    // —— 建筑模板提取 ——
+    {
+      const rootScene = new THREE.Group();
+      rootScene.add(buildingsG.scene);
+      rootScene.updateMatrixWorld(true);
+      let rootNode = null;
+      buildingsG.scene.traverse(o => { if (!rootNode && o.name === 'RootNode') rootNode = o; });
+      if (!rootNode) {
+        buildingsG.scene.traverse(o => { if (!rootNode || o.children.length > rootNode.children.length) rootNode = o; });
+      }
+      for (const child of [...rootNode.children]) {
+        const t = child.clone(true);
+        child.matrixWorld.decompose(t.position, t.quaternion, t.scale);
+        t.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        templates.set(child.name, t);
+      }
+    }
+
+    // —— 植被模板 ——
+    function prepFlora(gltf, key) {
+      const root = gltf.scene;
+      root.traverse(o => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) {
+            m.side = THREE.DoubleSide;
+            if (m.map) {
+              m.alphaTest = 0.45;
+              o.customDepthMaterial = new THREE.MeshDepthMaterial({
+                depthPacking: THREE.RGBADepthPacking, map: m.map, alphaTest: 0.45,
+              });
+            }
+          }
+        }
+      });
+      flora[key] = root;
+    }
+    prepFlora(leafG, 'leaf');
+    prepFlora(pineG, 'pine');
+    prepFlora(rockG, 'rock');
+    prepFlora(rock2G, 'rock2');
+    prepFlora(logG, 'log');
+    templates.set('wood_log', logG.scene);
+
+    // —— 世界搭建 ——
+    buildTown();
+    buildPylons();
+    scatterNature();
+    buildInstancedProps();   // 围栏/植被/岩石/柴堆 → InstancedMesh（可逐个炮毁/压毁）
+    buildMinimapStatic();
+    spawnPlayer();
+
+    // 验证钩子（自动化测试读取场景统计）
+    window.__mapStats = () => ({
+      calls: renderer.info.render.calls,
+      tris: renderer.info.render.triangles,
+      obstacles: world.obstacles.length,
+      buildings: mapBoxes.length,
+      townMeshes: (() => { let n = 0; townGroup.traverse(o => { if (o.isMesh) n++; }); return n; })(),
+      buildingSizes: mapBoxes.slice(0, 12).map(b => `${Math.round(b.w)}x${Math.round(b.d)}`),
+      houseRadii: world.obstacles.filter(o => o.r > 3.5).map(o => Math.round(o.r * 10) / 10).slice(0, 20),
+      destructibles: destructibles.length,
+      destroyed: destructibles.filter(d => !d.alive).length,
+      rubbleFields: rubbleFields.length,
+      instCounts: Object.fromEntries(Object.keys(instData).map(k => [k, instData[k].length])),
+      // 测试辅助：直接伤害物件（自动化验证用；onlyGroup=true 只选建筑）
+      __damageNearest: (px, pz, onlyGroup) => {
+        let best = null, bd = 1e9;
+        for (const d of destructibles) {
+          if (!d.alive) continue;
+          if (onlyGroup && d.kind !== 'group') continue;
+          const cx = d.kind === 'group' ? d.cx : d.x, cz = d.kind === 'group' ? d.cz : d.z;
+          const dd = (cx - px) ** 2 + (cz - pz) ** 2;
+          if (dd < bd) { bd = dd; best = d; }
+        }
+        if (!best) return null;
+        const cx = best.kind === 'group' ? best.cx : best.x, cz = best.kind === 'group' ? best.cz : best.z;
+        const n = best.hp;   // 先取次数（hp 会在命中中递减）
+        for (let i = 0; i < n; i++) {
+          damageDestructible(best, new THREE.Vector3(cx, mapTerrainHeight(cx, cz) + 1.5, cz));
+        }
+        return { hpLeft: best.hp, alive: best.alive, rubbleH: best.rule.rubbleH, collapsing: collapsing.length };
+      },
+      // 测试辅助：瞬移到最近一棵树旁碾倒（自动化验证树倒伏）
+      __crushNearestTree: () => {
+        if (!player) return 'no player';
+        let best = null, bd = 1e9;
+        for (const d of destructibles) {
+          if (!d.alive || d.kind !== 'inst' || (d.type !== 'leaf' && d.type !== 'pine')) continue;
+          const dd = (d.x - player.root.position.x) ** 2 + (d.z - player.root.position.z) ** 2;
+          if (dd < bd) { bd = dd; best = d; }
+        }
+        if (!best) return null;
+        player.root.position.set(best.x - 2, mapTerrainHeight(best.x - 2, best.z), best.z);
+        const before = destructibles.filter(d => !d.alive).length;
+        crushCheck();
+        return { crushed: destructibles.filter(d => !d.alive).length - before, type: best.type, alive: best.alive };
+      },
+      // 测试辅助：炮弹线段穿过 (x,z) 附近最近物件（验证围栏/电线杆穿弹）
+      __shellThroughNearest: (px, pz) => {
+        let best = null, bd = 1e9;
+        for (const d of destructibles) {
+          if (!d.alive) continue;
+          const cx = d.kind === 'group' ? d.cx : d.x, cz = d.kind === 'group' ? d.cz : d.z;
+          const dd = (cx - px) ** 2 + (cz - pz) ** 2;
+          if (dd < bd) { bd = dd; best = d; }
+        }
+        if (!best) return null;
+        const cx = best.kind === 'group' ? best.cx : best.x, cz = best.kind === 'group' ? best.cz : best.z;
+        const y = mapTerrainHeight(cx, cz) + 2;
+        const hit = world.onShellHitDestructible(
+          { x: cx - 25, y: y + 2, z: cz - 25 },
+          { x: cx + 25, y: y - 1, z: cz + 25 },
+          { shellType: 'he' }
+        );
+        return { type: best.type, alive: best.alive, hit };
+      },
+      // 测试辅助：坦克瞬移到 (x,z) 并执行履带压毁判定（自动化验证用）
+      __crushAt: (x, z) => {
+        if (!player) return 'no player';
+        player.root.position.set(x, mapTerrainHeight(x, z), z);
+        const before = destructibles.filter(d => !d.alive).length;
+        crushCheck();
+        const after = destructibles.filter(d => !d.alive).length;
+        return { crushed: after - before, totalDestroyed: after };
+      },
+    });
+
+    el('loading').classList.add('hide');
+    el('enterMask').classList.remove('hide');
+  } catch (e) {
+    console.error(e);
+    loadTextEl.textContent = `加载失败: ${e.message || e}`;
+  }
+})();
+
+// 进入战场（用户手势 → 音频解锁 + 指针锁定）
+el('enterMask').addEventListener('click', async () => {
+  el('enterMask').classList.add('hide');
+  el('hud').classList.add('show');
+  el('minimapWrap').style.display = '';
+  audio.init();
+  audio.applySettings({ master: 0.8, sfx: 0.9, ambient: 0.6, bgmOn: false });
+  await audio.loadExtSounds(player.cfg);
+  audio.startEngine();
+  started = true;
+  paused = false;
+  input.enabled = true;
+  input.requestLock();
+  clock.getDelta();   // 清帧间隔
+  message('地图测试 · W 驶向小镇');
+});
+
+el('btnResume').addEventListener('click', resume);
+el('btnRespawn').addEventListener('click', () => {
+  spawnPlayer();
+  resume();
+  message('坦克已复位');
+});
+
+renderer.setAnimationLoop(frame);
+</script>
+</body>
+</html>

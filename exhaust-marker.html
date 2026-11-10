@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>排气位置标注工具</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; color: #eee; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+  #canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  #panel {
+    position: fixed; top: 10px; left: 10px; background: rgba(20,20,40,0.92);
+    border: 1px solid #4a4a6a; border-radius: 8px; padding: 16px; min-width: 360px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  h2 { font-size: 16px; margin-bottom: 10px; color: #8af; }
+  .row { margin: 6px 0; font-size: 13px; line-height: 1.6; }
+  .coord { font-family: monospace; font-size: 14px; color: #fc6; }
+  button {
+    background: #4a6; color: #fff; border: none; border-radius: 4px;
+    padding: 8px 16px; font-size: 14px; cursor: pointer; margin: 4px 4px 4px 0;
+  }
+  button:hover { background: #5b7; }
+  button.blue { background: #46a; }
+  button.blue:hover { background: #57b; }
+  button.active { background: #a44; }
+  button.active:hover { background: #b55; }
+  select { background: #2a2a4e; color: #eee; border: 1px solid #4a4a6a; padding: 4px; border-radius: 4px; }
+  #info { color: #888; font-size: 12px; margin-top: 8px; }
+  .marker-info { background: #2a2a4e; border-radius: 4px; padding: 8px; margin: 4px 0; }
+  .marker-slot { background: #2a2a4e; border-radius: 4px; padding: 8px; margin: 4px 0; border: 1px solid #3a3a5e; }
+  .marker-slot.active { border-color: #e44; box-shadow: 0 0 6px rgba(255,60,60,0.3); }
+  .slot-label { font-size: 12px; color: #8af; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h2>排气位置标注工具</h2>
+  <div class="row">
+    模型: <select id="modelSel">
+      <option value="t-90m3">T-90M 突破-3</option>
+      <option value="t-80u">T-80U</option>
+      <option value="leopard_2a7">豹 2A7+</option>
+      <option value="m1a1sa">M1A1 SA</option>
+      <option value="m1a2_trophy">M1A2 SEPv3</option>
+      <option value="challenger_3">挑战者 3</option>
+      <option value="leopard_2a4">豹 2A4</option>
+      <option value="t-90sm">T-90SM 塔吉尔</option>
+      <option value="abrams_x">M1A2 X</option>
+      <option value="t-14_armata">T-14 阿玛塔</option>
+      <option value="ztz-99a">ZTZ-99A</option>
+    </select>
+    <button class="blue" onclick="loadModel()">加载</button>
+  </div>
+  <div class="row" id="modelInfo">模型信息: -</div>
+  <div class="marker-slot active" id="slot1">
+    <div class="slot-label">排烟点 1 (红)</div>
+    <div class="coord" id="marker1Info">未标注</div>
+  </div>
+  <div class="marker-slot" id="slot2">
+    <div class="slot-label">排烟点 2 (蓝)</div>
+    <div class="coord" id="marker2Info">未标注</div>
+  </div>
+  <div class="row">
+    <button onclick="setActive(1)" id="btn1" class="active">选点1</button>
+    <button onclick="setActive(2)" id="btn2">选点2</button>
+    <button class="blue" onclick="clearMarker()">清除当前</button>
+  </div>
+  <div class="row">
+    <button onclick="exportParam()">导出参数</button>
+    <button class="blue" onclick="copyAll()">复制全部已导出</button>
+  </div>
+  <div id="info">
+    操作: 左键点击模型表面放置当前排烟点<br>
+    右键拖拽旋转 · 滚轮缩放<br>
+    切换"选点1/选点2"选择当前标注的排烟点
+  </div>
+  <div id="exportResult" style="margin-top:8px;"></div>
+  <div id="allResults" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
+</div>
+<canvas id="canvas"></canvas>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const TANK_MODELS = {
+  't-90m3': 'model/t-90m3.glb',
+  't-80u': 'model/tank_t-80u.glb',
+  'leopard_2a7': 'model/leopard_2a7.glb',
+  'm1a1sa': 'model/m1a1sa.glb',
+  'm1a2_trophy': 'model/m1a2_trophy-hv.glb',
+  'challenger_3': 'model/challenger_3.glb',
+  'leopard_2a4': 'model/leopard_2a4.glb',
+  't-90sm': 'model/t-90sm.glb',
+  'abrams_x': 'model/abrams_x.glb',
+  't-14_armata': 'model/t-14_armata.glb',
+  'ztz-99a': 'model/ztz-99a.glb',
+};
+
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 5000);
+camera.position.set(20, 15, 20);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(10, 20, 10);
+scene.add(dirLight);
+
+const grid = new THREE.GridHelper(50, 50, 0x444466, 0x222244);
+scene.add(grid);
+
+let model = null;
+let modelKey = null;
+let markers = [null, null];
+let localCoords = [null, null];
+let activeSlot = 1;
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+let allExports = [];
+
+function setActive(n) {
+  activeSlot = n;
+  document.getElementById('btn1').classList.toggle('active', n === 1);
+  document.getElementById('btn2').classList.toggle('active', n === 2);
+  document.getElementById('slot1').classList.toggle('active', n === 1);
+  document.getElementById('slot2').classList.toggle('active', n === 2);
+}
+window.setActive = setActive;
+
+function createMarker(point, color) {
+  const group = new THREE.Group();
+  const g = new THREE.SphereGeometry(0.25, 16, 16);
+  const m = new THREE.MeshBasicMaterial({ color });
+  const sphere = new THREE.Mesh(g, m);
+  group.add(sphere);
+  const lineGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(point.x, 0, point.z),
+    point.clone(),
+  ]);
+  const lineMat = new THREE.LineBasicMaterial({ color });
+  group.add(new THREE.Line(lineGeom, lineMat));
+  group.position.copy(point);
+  return group;
+}
+
+window.loadModel = async function() {
+  const name = document.getElementById('modelSel').value;
+  modelKey = name;
+  const cfgResp = await fetch('js/config.js');
+  const cfgText = await cfgResp.text();
+  const cfgMatch = cfgText.match(new RegExp(`'${name}'\\s*:\\s*\\{([\\s\\S]*?)\\n  \\},`));
+  let scale = 1, existingExhaust = null;
+  if (cfgMatch) {
+    const scMatch = cfgMatch[1].match(/scale:\s*([\d.]+)/);
+    if (scMatch) scale = parseFloat(scMatch[1]);
+    const exMatch = cfgMatch[1].match(/exhaustLocal:\s*\[([^\]]+\][^\]]*)\]/);
+    if (exMatch) {
+      const inner = exMatch[1].trim();
+      const points = inner.match(/\[[^\]]+\]/g);
+      if (points) existingExhaust = points.map(p => p.slice(1, -1).split(',').map(Number));
+    }
+  }
+
+  if (model) scene.remove(model);
+  for (const m of markers) if (m) scene.remove(m);
+  markers = [null, null];
+  localCoords = [null, null];
+  document.getElementById('marker1Info').textContent = '未标注';
+  document.getElementById('marker2Info').textContent = '未标注';
+
+  const loader = new GLTFLoader();
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('./vendor/three/jsm/libs/draco/');
+  loader.setDRACOLoader(dracoLoader);
+  loader.load(TANK_MODELS[name], (gltf) => {
+    model = new THREE.Group();
+    model.scale.setScalar(scale);
+    model.add(gltf.scene);
+    scene.add(model);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3()).length();
+    camera.position.copy(center).add(new THREE.Vector3(size * 0.6, size * 0.4, size * 0.6));
+    controls.target.copy(center);
+    controls.update();
+
+    document.getElementById('modelInfo').innerHTML =
+      `scale: <span class="coord">${scale}</span> | 尺寸: <span class="coord">${size.toFixed(2)}m</span>`;
+
+    if (existingExhaust && existingExhaust.length >= 2) {
+      for (let i = 0; i < 2; i++) {
+        const v = new THREE.Vector3().fromArray(existingExhaust[i]);
+        const world = v.clone();
+        model.localToWorld(world);
+        const color = i === 0 ? 0xff4400 : 0x44aaff;
+        markers[i] = createMarker(world, color);
+        scene.add(markers[i]);
+        localCoords[i] = v;
+        document.getElementById(`marker${i+1}Info`).textContent =
+          `[${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}]`;
+      }
+    } else if (existingExhaust && existingExhaust.length === 1) {
+      const v = new THREE.Vector3().fromArray(existingExhaust[0]);
+      const world = v.clone();
+      model.localToWorld(world);
+      markers[0] = createMarker(world, 0xff4400);
+      scene.add(markers[0]);
+      localCoords[0] = v;
+      document.getElementById('marker1Info').textContent =
+        `[${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}]`;
+    }
+  });
+};
+
+canvas.addEventListener('click', (e) => {
+  if (e.button !== 0) return;
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  if (!model) return;
+  const hits = raycaster.intersectObject(model, true);
+  if (hits.length > 0) {
+    const point = hits[0].point;
+    const local = model.worldToLocal(point.clone());
+    const idx = activeSlot - 1;
+    const color = idx === 0 ? 0xff4400 : 0x44aaff;
+    if (markers[idx]) scene.remove(markers[idx]);
+    markers[idx] = createMarker(point, color);
+    scene.add(markers[idx]);
+    localCoords[idx] = local;
+    document.getElementById(`marker${activeSlot}Info`).textContent =
+      `[${local.x.toFixed(2)}, ${local.y.toFixed(2)}, ${local.z.toFixed(2)}]`;
+  }
+});
+
+window.clearMarker = function() {
+  const idx = activeSlot - 1;
+  if (markers[idx]) { scene.remove(markers[idx]); markers[idx] = null; }
+  localCoords[idx] = null;
+  document.getElementById(`marker${activeSlot}Info`).textContent = '未标注';
+};
+
+window.exportParam = function() {
+  if (!localCoords[0] || !localCoords[1]) {
+    alert('请先标注两个排烟点');
+    return;
+  }
+  const v1 = localCoords[0], v2 = localCoords[1];
+  const text = `    exhaustLocal: [[${v1.x.toFixed(2)}, ${v1.y.toFixed(2)}, ${v1.z.toFixed(2)}], [${v2.x.toFixed(2)}, ${v2.y.toFixed(2)}, ${v2.z.toFixed(2)}]],  // ${modelKey}`;
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('exportResult').innerHTML =
+      `<div class="marker-info"><b>已复制到剪贴板:</b><br><span class="coord">${text}</span></div>`;
+  }).catch(() => {
+    document.getElementById('exportResult').innerHTML =
+      `<div class="marker-info"><span class="coord">${text}</span></div>`;
+  });
+  const entry = allExports.find(e => e.key === modelKey);
+  if (entry) entry.text = text;
+  else allExports.push({ key: modelKey, text });
+  refreshAll();
+};
+
+window.copyAll = function() {
+  if (allExports.length === 0) { alert('还没有导出任何参数'); return; }
+  const text = allExports.map(e => e.text).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    alert(`已复制 ${allExports.length} 条参数到剪贴板`);
+  });
+};
+
+function refreshAll() {
+  document.getElementById('allResults').innerHTML =
+    allExports.map(e => `<div class="marker-info"><b>${e.key}</b><br><span class="coord">${e.text}</span></div>`).join('');
+}
+
+loadModel();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

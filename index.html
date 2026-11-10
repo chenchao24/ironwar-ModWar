@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>钢铁战线2 IRON WAR — 坦克对战</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<!-- ══════════ 封面 ══════════ -->
+<div id="screen-cover" class="screen active">
+  <div class="cover-bg"></div>
+  <div class="cover-content">
+    <div class="game-logo">
+      <div class="logo-main">钢铁战线2</div>
+      <div class="logo-sub-cn">装甲前锋</div>
+      <div class="logo-sub">IRON&nbsp;WAR&nbsp;:&nbsp;TANK&nbsp;BATTLE</div>
+    </div>
+    <div class="cover-hint blink">点 击 任 意 处 进 入</div>
+  </div>
+</div>
+
+<!-- ══════════ 主菜单（登录） ══════════ -->
+<div id="screen-menu" class="screen">
+  <div class="menu-left">
+    <div class="menu-logo">钢铁战线2<span>装甲前锋 · IRON WAR</span></div>
+    <div class="menu-items">
+      <button class="menu-btn" id="btn-war-mode">战争模式<span class="btn-note">歼灭战 · 1v1</span></button>
+      <button class="menu-btn disabled" id="btn-hunt-mode" disabled>猎杀比赛<span class="btn-note">即将推出</span></button>
+      <button class="menu-btn" id="btn-settings">设置<span class="btn-note">音量 · 画质</span></button>
+    </div>
+  </div>
+  <div class="menu-footer">IRON WAR v0.1 · 验证版 · WebGL2</div>
+</div>
+
+<!-- ══════════ 设置面板 ══════════ -->
+<div id="modal-settings" class="modal">
+  <div class="modal-box">
+    <div class="modal-title">设 置</div>
+    <div class="setting-row"><label>主音量</label><input type="range" id="set-master" min="0" max="100" value="80"><span class="set-val" id="val-master">80</span></div>
+    <div class="setting-row"><label>音效</label><input type="range" id="set-sfx" min="0" max="100" value="90"><span class="set-val" id="val-sfx">90</span></div>
+    <div class="setting-row"><label>环境声</label><input type="range" id="set-ambient" min="0" max="100" value="60"><span class="set-val" id="val-ambient">60</span></div>
+    <div class="setting-row"><label>背景音乐</label>
+      <button type="button" id="set-bgm-toggle" class="bgm-toggle">开</button>
+      <input type="range" id="set-bgm" min="0" max="100" value="50"><span class="set-val" id="val-bgm">50</span>
+    </div>
+    <div class="setting-row"><label>战斗音乐</label>
+      <select id="set-bgm-mode">
+        <option value="normal">标准模式</option>
+        <option value="personal">个性化（按坦克国别）</option>
+      </select>
+    </div>
+    <div class="setting-row"><label>画质</label>
+      <select id="set-quality">
+        <option value="low">低</option>
+        <option value="medium">中</option>
+        <option value="high" selected>高</option>
+      </select>
+    </div>
+    <div class="modal-actions"><button class="menu-btn small" id="btn-settings-close">保 存 返 回</button></div>
+  </div>
+</div>
+
+<!-- ══════════ 机库（选车） ══════════ -->
+<div id="screen-hangar" class="screen">
+  <div class="fh-hint">滚轮缩放 · 拖拽旋转</div>
+  <div class="fh-pager">
+    <button class="fh-pager-btn" data-action="prev">‹</button>
+    <span class="fh-pager-name" id="fh-pager-name"></span>
+    <button class="fh-pager-btn" data-action="next">›</button>
+  </div>
+  <div class="fh-select" id="fh-select">
+    <button class="fh-select-btn" id="fh-select-btn" title="快速选择坦克">
+      <img class="fh-select-flag" id="fh-select-flag" alt="">
+      <span class="fh-select-cur" id="fh-select-name"></span>
+      <span class="fh-select-arrow">▾</span>
+    </button>
+    <div class="fh-select-list" id="fh-select-list"></div>
+  </div>
+  <div class="fh-panel fh-panel-info">
+    <div class="fh-info-head">
+      <img id="fh-ac-flag" class="fh-flag" alt="">
+      <span class="fh-info-name" id="fh-ac-name"></span>
+      <span class="fh-info-sub" id="fh-ac-sub"></span>
+    </div>
+    <div class="fh-info-history" id="fh-ac-history"></div>
+    <div class="fh-spec-block">
+      <div class="fh-spec-title">性能参数</div>
+      <div class="fh-spec-list" id="fh-real-spec"></div>
+    </div>
+    <div class="fh-spec-block">
+      <div class="fh-spec-title">游戏属性</div>
+      <div class="fh-bars" id="fh-game-bars"></div>
+    </div>
+  </div>
+  <div class="fh-panel fh-panel-config">
+    <div class="fh-cfg-title">歼灭战 · 1v1</div>
+    <div class="fh-cfg-preview" id="fh-preview-text"></div>
+    <div class="fh-diff-row" id="fh-map-row">
+      <span class="fh-diff-label">地图</span>
+      <button class="fh-diff-btn" data-map="plains">开阔平原</button>
+      <button class="fh-diff-btn" data-map="town">东欧小镇</button>
+    </div>
+    <div class="fh-diff-row" id="fh-diff-row">
+      <span class="fh-diff-label">对手</span>
+      <button class="fh-diff-btn" data-diff="novice">新手</button>
+      <button class="fh-diff-btn active" data-diff="standard">标准</button>
+      <button class="fh-diff-btn" data-diff="ace">王牌</button>
+    </div>
+    <button class="fh-start-btn" data-action="start">开 始 战 斗</button>
+  </div>
+  <button class="fh-back" data-action="back">‹ 返回</button>
+  <div class="fh-debug" id="fh-debug">
+    <div class="fh-debug-title">相机调试</div>
+    <div class="fh-dbg-row"><label>距离</label><input type="range" id="dbg-r" min="3" max="30" step="0.1"><span id="dbg-r-v"></span></div>
+    <div class="fh-dbg-row"><label>水平角</label><input type="range" id="dbg-theta" min="-3.14" max="3.14" step="0.01"><span id="dbg-theta-v"></span></div>
+    <div class="fh-dbg-row"><label>仰角</label><input type="range" id="dbg-phi" min="-0.3" max="1.2" step="0.01"><span id="dbg-phi-v"></span></div>
+    <div class="fh-dbg-row"><label>lookX</label><input type="range" id="dbg-lx" min="-8" max="8" step="0.1"><span id="dbg-lx-v"></span></div>
+    <div class="fh-dbg-row"><label>lookY</label><input type="range" id="dbg-ly" min="0" max="6" step="0.1"><span id="dbg-ly-v"></span></div>
+    <div class="fh-dbg-row"><label>lookZ</label><input type="range" id="dbg-lz" min="-8" max="8" step="0.1"><span id="dbg-lz-v"></span></div>
+    <div class="fh-dbg-row"><label>Y抬高</label><input type="range" id="dbg-lift" min="0" max="6" step="0.1"><span id="dbg-lift-v"></span></div>
+    <button class="fh-dbg-copy" id="dbg-copy">复制参数</button>
+  </div>
+</div>
+
+<!-- ══════════ 战斗 HUD ══════════ -->
+<div id="hud" class="screen">
+  <!-- 缩圈准星（尺寸随散布变化） -->
+  <div id="crosshair">
+    <div class="ch-ring"></div>
+    <div class="ch-dot"></div>
+    <div id="reload-ring"><svg viewBox="0 0 60 60"><circle class="rr-bg" cx="30" cy="30" r="26"/><circle class="rr-fg" cx="30" cy="30" r="26"/></svg></div>
+    <div id="aim-progress"></div>
+    <div id="aim-info"><span id="aim-range">-- m</span> <span id="aim-target"></span></div>
+  </div>
+  <div id="hit-marker">✕</div>
+  <div id="pen-marker"></div>
+
+  <!-- 狙击瞄准镜（右键/Shift）：羽化边缘遮罩（无硬边黑框）+ 通用壳（外环/装填环/读数） + 分划按坦克风格生成（ui.js → js/reticles.js） -->
+  <div id="gunsight" class="hidden">
+    <svg id="gs-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <!-- 炮对镜羽化暗角：中心清晰 → 边缘极缓渐黑（宽过渡带=羽化），无任何硬边 -->
+        <radialGradient id="gs-vignette" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stop-color="rgba(2,4,2,0)"/>
+          <stop offset="0.66" stop-color="rgba(2,4,2,0)"/>
+          <stop offset="0.80" stop-color="rgba(2,4,2,0.14)"/>
+          <stop offset="0.92" stop-color="rgba(2,4,2,0.78)"/>
+          <stop offset="1" stop-color="rgba(2,4,2,0.995)"/>
+        </radialGradient>
+      </defs>
+      <!-- 全屏羽化渐变（铺满视口，从中心向四周无级渐黑；slice 裁剪下覆盖所有角落） -->
+      <rect width="1000" height="1000" fill="url(#gs-vignette)"/>
+      <!-- 装填大光圈（琥珀进度弧 / 就绪绿环） -->
+      <g id="gs-big-ring">
+        <circle class="gsr-bg" cx="500" cy="500" r="58"/>
+        <circle class="gsr-fg" cx="500" cy="500" r="58" transform="rotate(-90 500 500)"/>
+      </g>
+      <!-- 六国分划（俄/美/中/英/德/试验车，按 cfg.reticle 生成一次） -->
+      <g id="gs-reticle"></g>
+      <text id="gs-reload-text" x="500" y="592" text-anchor="middle">主炮就绪</text>
+    </svg>
+      <div id="gs-disp"></div>
+      <div id="gs-readouts">
+        <div class="gs-ro" id="gs-shell">APFSDS</div>
+        <div class="gs-ro" id="gs-reload">就绪</div>
+        <div class="gs-ro" id="gs-zoom">×1</div>
+        <div class="gs-ro" id="gs-ir">IR</div>
+        <div class="gs-ro" id="gs-range">-- m</div>
+        <div class="gs-ro" id="gs-target"></div>
+      </div>
+      <div id="gs-flash"></div>
+      <!-- 激光致盲白幕（敌方压制器照射：快亮慢灭，中心字样） -->
+      <div id="gs-blind"><span>⚠ 被激光压制</span></div>
+    </div>
+
+  <!-- 敌标层（血条/距离/▼） -->
+  <div id="markers"></div>
+
+  <!-- 小地图 -->
+  <canvas id="minimap"></canvas>
+
+  <!-- 弹药显示条（左侧中部，MG + 三弹种，ui.js 按所选坦克动态生成） -->
+  <div id="ammo-panel"></div>
+
+  <div id="hud-bottom-left">
+    <div id="hp-panel">
+      <div id="hp-label">T-90M</div>
+      <div id="hp-bar"><div id="hp-fill"></div><span id="hp-text">2400</span></div>
+      <div id="status-tags"></div>
+      <div id="mod-chips"></div>
+    </div>
+  </div>
+
+  <div id="hud-bottom-right">
+    <div id="speed-panel">
+      <div class="sp-label">SPEED</div>
+      <div class="sp-row"><span id="speed-val">0</span><span class="unit">km/h</span></div>
+      <div id="speed-bar"><div id="speed-fill"></div></div>
+    </div>
+    <div id="gear-panel"><span class="gp-label">GEAR</span> <span id="gear-val">N</span></div>
+  </div>
+
+  <div id="hud-top">
+    <div id="objective">歼灭所有敌方坦克 <span class="en-label">ELIMINATE</span></div>
+    <div id="enemy-counter">敌方剩余 <span class="en-label">ENEMIES</span>: <b id="enemies-left">1</b></div>
+    <div id="time-counter">剩余时间 <span class="en-label">TIME</span>: <b id="time-left">10:00</b></div>
+    <!-- 罗盘卡尺（顶部居中，刻度带由 ui.js 生成） -->
+    <div id="compass">
+      <div id="csWindow"><div id="csTicks"></div></div>
+      <div id="csNeedle"></div>
+      <div id="compassDeg">000°</div>
+    </div>
+    <!-- 激光告警 / 压制提示（罗盘下方 100px） -->
+    <div id="laser-warning">⚠ 被激光测距定位</div>
+    <div id="laser-suppress">激光压制中 <b id="laser-suppress-t">0.0</b>s</div>
+  </div>
+
+  <!-- 命中记录（右下，新事件底部出现向上推） -->
+  <div id="hitlog"></div>
+
+  <!-- 烟雾弹计数（左下，HP 面板上方） -->
+  <div id="smoke-panel"><span class="smk-label">SMK</span> <span id="smoke-count">3/3</span></div>
+
+  <!-- 消耗品（烟雾弹下方：维修包 R / 灭火器 T） -->
+  <div id="consum-panel">
+    <div class="cons-item" id="cons-repair"><span class="cons-key">R</span><span class="cons-name">维修</span></div>
+    <div class="cons-item" id="cons-ext"><span class="cons-key">T</span><span class="cons-name">灭火</span></div>
+  </div>
+
+  <!-- 防护体系状态（消耗品下方：爆反板 / APS / 观瞄 / 激光压制器） -->
+  <div id="prot-panel">
+    <div class="prot-row" id="prot-era"><span class="prot-label">ERA</span><span class="prot-val" id="prot-era-val"></span></div>
+    <div class="prot-row" id="prot-aps"><span class="prot-label">APS</span><span class="prot-val" id="prot-aps-val"></span></div>
+    <div class="prot-row" id="prot-optics"><span class="prot-label">OPT</span><span class="prot-val" id="prot-optics-val"></span></div>
+    <div class="prot-row" id="prot-lws"><span class="prot-label">LWS</span><span class="prot-val" id="prot-lws-val"></span></div>
+  </div>
+
+  <div id="damage-vignette"></div>
+  <div id="damage-indicator"></div>
+  <div id="reload-warning">装填中…</div>
+  <div id="battle-message"></div>
+</div>
+
+<!-- ══════════ 暂停 ══════════ -->
+<div id="screen-pause" class="screen">
+  <div id="pause-box">
+    <div id="pause-title">暂 停</div>
+    <div class="select-actions">
+      <button class="menu-btn primary" id="btn-pause-resume">返回游戏</button>
+      <button class="menu-btn small" id="btn-pause-menu">退回首页</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ 结算 ══════════ -->
+<div id="screen-result" class="screen">
+  <div id="result-box">
+    <div id="result-title">胜 利</div>
+    <div id="result-detail"></div>
+    <div class="select-actions">
+      <button class="menu-btn small" id="btn-result-menu">返回主菜单</button>
+      <button class="menu-btn primary" id="btn-result-retry">再来一局</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading-overlay"><div class="load-text">正在装载战场资源…</div><div class="load-bar"><i id="load-fill"></i></div></div>
+
+<!-- 机库/切车载入浮标（小型指示：spinner + 进度条，不遮挡界面） -->
+<div id="hangar-loading"><div class="hl-spinner"></div><div id="hangar-loading-text">载入机库…</div><div class="hl-bar"><i id="hangar-loading-fill"></i></div></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

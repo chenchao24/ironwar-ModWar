@@ -1,0 +1,23 @@
+# 隔离区：只移动未删除，可执行 npm run restore 一键回滚
+_archive/
+
+# 上线主体：由 npm run build 生成，勿手工提交
+dist/
+
+# 运行依赖已 vendor 到 vendor/three，node_modules 仅用于开发工具
+node_modules/
+
+# 编辑器 / IDE 缓存（保留在本地，不入库）
+.codegraph/
+.codeartsdoer/
+.zcode/
+.workbuddy/
+server.log
+*.pid
+
+# 历史截图与冷备目录（若手工放回，仍不入库）
+scripts/*.png
+newTankmodel2/
+model_bk/
+houseModel/*.md
+maps/

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>新坦克接入探针（4车）</title>
+<style>
+  body { margin: 0; background: #1c2026; color: #ccc; font: 12px monospace; overflow: hidden; }
+  #hud { position: fixed; top: 8px; left: 10px; z-index: 10; background: rgba(0,0,0,.55); padding: 8px; border-radius: 6px; }
+  button { margin: 2px; padding: 4px 10px; }
+  button.on { background: #2a6; color: #fff; }
+  #info { margin-top: 6px; color: #ffd24a; max-width: 480px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div>
+    <button data-tank="t-72b3">T-72B3</button>
+    <button data-tank="strv_122a">Strv122A</button>
+    <button data-tank="leopard_2ri">豹2RI</button>
+    <button data-tank="challenger_2">挑战者2</button>
+    <button data-tank="arjun_mk1a">阿琼</button>
+    |
+    <button data-view="side">侧视</button>
+    <button data-view="top">俯视</button>
+    <button data-view="front">前视</button>
+    <button data-view="persp">透视</button>
+    |
+    <button id="anim">旋转炮塔</button>
+    <button id="pitch">俯仰</button>
+    <button id="mg">机枪伺服</button>
+  </div>
+  <div id="info"></div>
+</div>
+<canvas id="app"></canvas>
+<script type="importmap">
+{ "imports": {
+  "three": "../vendor/three/three.module.js",
+  "three/addons/": "../vendor/three/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+window.THREE = THREE;
+
+// ═══ 候选配置（与 config.js 草案一致）═══
+const CFG = {
+  't-72b3': {
+    model: '../model/t-72b3.glb?v=2', scale: 1.0, forwardAxis: '+x',
+    parts: {
+      turret: ['turret_t-72m-turret_8_0', 'sosna-u_t-72b3-extras2_15_0', 'co-antenna2_t-72b3-extras2_15_0',
+               'co-antenna_t-72m1-k5extra_13_0', 'antenna_t-72m1-k5extra_13_0',
+               'hatch2_t-72m-turret_8_0', 'hatch4_t-72m-turret_8_0', 'hatch_t-72m-turret_8_0',
+               'mount2_t-72m-turret_8_0', 'backet_t-72m1-gun_11_0', 'lens003_t-72m-turret_8_0',
+               'lens004_t-72m1-hull_1_0', 'lens002_t-72m1-hull_1_0', 'internal001_t-72m1-interior_3_0',
+               'mesh03_t-72m1-hull_1_0', 'box01_t-72m-turret_8_0', 'turet_extra_t-72b3-eras_14_0',
+               'object03_t-72b3-eras_14_0',
+               'smoke-model_t-72b3-eras_14_0', 'smoke2-model_t-72b3-eras_14_0', 'smoke3-model_t-72b3-eras_14_0',
+               'smoke4-model_t-72b3-eras_14_0', 'smoke5-model_t-72b3-eras_14_0', 'smoke6-model_t-72b3-eras_14_0',
+               'smoke7-model_t-72b3-eras_14_0', 'smoke8-model_t-72b3-eras_14_0',
+               'era_t-72b3-eras_14_0',
+               ...Array.from({length: 30}, (_, i) => `era ${i + 2}_t-72b3-eras_14_0`)],
+      mg: ['mount3_t-72m1-gun_11_0', 'weapon2_nsvt_10_0', 'mgbracket_t-72m1-gun_11_0', 'mgbox_nsvt_10_0'],
+      mgFlipY: true,
+      barrel: ['weapon_t-72m1-gun_11_0', 'internal_t-72m1-interior_3_0', 'barrel_t-72m1-gun_12_0',
+               'mount_t-72m1-mantlet_9_0', 'weapon3_nsvt_10_0'],
+      track: ['track2_t-72m1-track_6_0', 'track03_t-72m1-track_6_0'],
+      wheels: ['wheel_t-72m1-wheel_4_0', 'wheel2_t-72m1-wheel_4_0', 'wheel3_t-72m1-wheel_4_0', 'wheel4_t-72m1-wheel_4_0',
+               'wheel5_t-72m1-wheel_4_0', 'wheel6_t-72m1-wheel_4_0', 'wheel7_t-72m1-wheel_4_0', 'wheel8_t-72m1-wheel_4_0',
+               'wheel9_t-72m1-wheel_4_0', 'wheel10_t-72m1-wheel_4_0', 'wheel11_t-72m1-wheel_4_0', 'wheel12_t-72m1-wheel_4_0',
+               'wheel13_t-72m1-wheel_4_0', 'wheel14_t-72m1-wheel_4_0', 'wheel15_t-72m1-wheel_4_0', 'wheel16_t-72m1-wheel_4_0'],
+    },
+    turretPivot: [0, 1.48, -0.257],
+    barrelPivot: [0, 1.76, 1.08],
+    muzzleLocal: [0, 1.76, 5.63],
+    exhaustLocal: [[1.72, 1.33, -2.05], [1.72, 1.33, -1.70]],
+    trackLocal: [[-1.45, 0.1, 0], [1.45, 0.1, 0]],
+    mgFlipY: true,
+  },
+  'strv_122a': {
+    model: '../model/strv_122a.glb?v=2', scale: 1.0, forwardAxis: '+z',
+    parts: {
+      turret: ['Object_24', 'Object_23', 'Object_22', 'Object_7', 'Object_25', 'Object_20', 'Object_18', 'Object_21', 'Object_31'],
+      mg: ['Object_10', 'Object_4', 'Object_8'],
+      barrel: ['Object_33', 'Object_5'],
+      track: ['Object_3', 'Object_2'],
+      hidden: ['Object_31'],
+      wheels: [],
+    },
+    turretPivot: [0, 1.68, -0.131],
+    barrelPivot: [0, 2.0, 0.5],
+    muzzleLocal: [0, 2.0, 5.74],
+    exhaustLocal: [[-0.7, 1.25, -4.0], [0.7, 1.25, -4.0]],
+    trackLocal: [[-1.36, 0.1, 0], [1.36, 0.1, 0]],
+    mgMuzzle: 'auto',
+  },
+  'leopard_2ri': {
+    model: '../model/leopard_2ri.glb?v=2', scale: 1.0, forwardAxis: '+z',
+    parts: {
+      turret: ['Object_14', 'Object_15', 'Object_13', 'Object_6', 'Object_11', 'Object_12', 'Object_10', 'Object_4', 'Object_17'],
+      mg: ['Object_16', 'Object_20', 'Object_5'],
+      barrel: ['Object_9', 'Object_7', 'Object_8'],
+      track: ['Object_3', 'Object_2'],
+      hidden: ['Object_18'],
+      wheels: [],
+    },
+    turretPivot: [0, 1.66, 0.2],
+    barrelPivot: [0, 2.0, 1.9],
+    muzzleLocal: [0, 2.0, 5.63],
+    exhaustLocal: [[-0.8, 1.25, -4.0], [0.8, 1.25, -4.0]],
+    trackLocal: [[-1.36, 0.1, 0], [1.36, 0.1, 0]],
+    mgMuzzle: 'auto',
+  },
+  'arjun_mk1a': {
+    model: '../model/arjun_mk.ia.glb?v=2', scale: 1.0, forwardAxis: '+z',
+    parts: {
+      turret: ['Object_19', 'Object_4', 'Object_29', 'Object_7', 'Object_30', 'Object_13', 'Object_5', 'Object_28', 'Object_21'],
+      mg: ['Object_16', 'Object_8'],
+      barrel: ['Object_12', 'Object_10', 'Object_2'],
+      track: ['Object_3', 'Object_9'],
+      hidden: ['Object_20'],
+      wheels: [],
+    },
+    turretPivot: [0, 1.68, -0.236],
+    barrelPivot: [0, 2.0, 1.6],
+    muzzleLocal: [0, 2.0, 6.04],
+    exhaustLocal: [[-1.0, 1.3, -4.4], [1.0, 1.3, -4.4]],
+    trackLocal: [[-1.47, 0.1, 0], [1.47, 0.1, 0]],
+    mgMuzzle: 'auto',
+  },
+  'challenger_2': {
+    model: '../model/challenger_2.glb?v=2', scale: 1.0, forwardAxis: '+x',
+    parts: {
+      turret: ['turret_fv4030-turret_4_0', 'weapon3_fv4030-fueltank-maingun_1_0',
+               'antenna_fv4030-turret_4_0', 'antenna2_fv4030-turret_4_0',
+               'hatch2_fv4030-turret_4_0', 'hatch_fv4030-turret_4_0',
+               'lens turret_fv4030-turret_4_0', 'turret_interior_fv4030-interior_3_0',
+               'smoke-model_fv4030-turret_4_0', 'smokeb-model_fv4030-turret_4_0', 'smokec-model_fv4030-turret_4_0',
+               'smoked-model_fv4030-turret_4_0', 'smokee-model_fv4030-turret_4_0', 'smokef-model_fv4030-turret_4_0',
+               'smokeg-model_fv4030-turret_4_0', 'smokeh-model_fv4030-turret_4_0', 'smokei-model_fv4030-turret_4_0',
+               'smokej-model_fv4030-turret_4_0'],
+      mg: ['mount2_fv4030-turret_4_0', 'weapon2_l7a2_5_0', 'bipod_l7a2_5_0',
+           'clip2_l7a2-box-vehicle_6_0', 'mgbracket2_fv4030-turret_4_0'],
+      barrel: ['weapon_fv4030-fueltank-maingun_1_0', 'mount_fv4030-hull_0_0', 'mountdoor_fv4030-hull_0_0'],
+      track: ['track_fv4030-tracks_8_0', 'track2_fv4030-tracks_8_0'],
+      wheels: ['wheel_fv4030-wheels_7_0', 'wheel2_fv4030-wheels_7_0', 'wheel3_fv4030-wheels_7_0', 'wheel4_fv4030-wheels_7_0',
+               'wheel5_fv4030-wheels_7_0', 'wheel6_fv4030-wheels_7_0', 'wheel7_fv4030-wheels_7_0', 'wheel8_fv4030-wheels_7_0',
+               'wheel9_fv4030-wheels_7_0', 'wheel10_fv4030-wheels_7_0', 'wheel11_fv4030-wheels_7_0', 'wheel12_fv4030-wheels_7_0',
+               'wheel13_fv4030-wheels_7_0', 'wheel14_fv4030-wheels_7_0', 'wheel15_fv4030-wheels_7_0', 'wheel16_fv4030-wheels_7_0'],
+    },
+    turretPivot: [0, 1.65, 0.05],
+    barrelPivot: [0, 1.85, 1.9],
+    muzzleLocal: [0, 1.85, 6.95],
+    exhaustLocal: [[1.62, 1.67, -2.19], [-1.62, 1.67, -2.19]],
+    trackLocal: [[-1.37, 0.1, 0], [1.37, 0.1, 0]],
+    mgMuzzle: 'auto',
+  },
+};
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('app'), antialias: true });
+renderer.setPixelRatio(1);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 500);
+function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x333840);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.6));
+const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(5, 10, 6); scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0xffffff, 0.9); dl2.position.set(-6, 4, -5); scene.add(dl2);
+scene.add(new THREE.GridHelper(40, 40, 0x556677, 0x3a4450));
+
+const loader = new GLTFLoader();
+const draco = new DRACOLoader();
+draco.setDecoderPath('../vendor/three/jsm/libs/draco/');
+loader.setDRACOLoader(draco);
+
+// ── 标记 ──
+function sphere(color, r = 0.08) {
+  return new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10),
+    new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95 }));
+}
+let group = null, anim = null;
+const state = { turret: 0, pitch: 0, mg: 0 };
+
+function findMeshes(model, names, flatten = false) {
+  const out = [];
+  for (const n of names) {
+    const o = model.getObjectByName(n);
+    if (o) { if (flatten && !o.isMesh) { o.traverse(c => c.isMesh && out.push(c)); } else out.push(o); }
+    else console.warn('未找到部件:', n);
+  }
+  return out;
+}
+
+function build(key) {
+  if (group) { scene.remove(group); group = null; }
+  const cfg = CFG[key];
+  group = new THREE.Group(); scene.add(group);
+  state.turret = state.pitch = state.mg = 0;
+
+  loader.load(cfg.model, (gltf) => {
+    const gltfScene = gltf.scene;
+    const model = new THREE.Group();
+    model.scale.setScalar(cfg.scale);
+    model.add(gltfScene);
+    group.add(model);
+    window.__model = model;
+
+    // 与 tank.js 相同的烘焙
+    if (cfg.forwardAxis === '+x') {
+      gltfScene.rotation.y = -Math.PI / 2;
+      gltfScene.updateMatrixWorld(true);
+      for (const child of gltfScene.children) {
+        child.matrix.copy(child.matrixWorld);
+        child.matrix.decompose(child.position, child.quaternion, child.scale);
+      }
+      gltfScene.rotation.y = 0;
+      gltfScene.updateMatrixWorld(true);
+    }
+
+    // 拆分（与 tank.js 一致）
+    if (cfg.parts.fixedToHull) for (const n of cfg.parts.fixedToHull) { const o = gltfScene.getObjectByName(n); if (o) model.attach(o); }
+    const turretGroup = new THREE.Group();
+    turretGroup.position.fromArray(cfg.turretPivot);
+    model.add(turretGroup);
+    for (const m of findMeshes(model, cfg.parts.turret)) turretGroup.attach(m);
+    const barrelGroup = new THREE.Group();
+    barrelGroup.position.fromArray(cfg.barrelPivot).sub(turretGroup.position);
+    turretGroup.add(barrelGroup);
+    for (const m of findMeshes(model, cfg.parts.barrel)) barrelGroup.attach(m);
+    let mgGroup = null, mgMuzzleLocal = null;
+    if (cfg.parts.mg && cfg.parts.mg.length) {
+      const mgMeshes = findMeshes(model, cfg.parts.mg);
+      if (mgMeshes.length) {
+        mgGroup = new THREE.Group();
+        turretGroup.add(mgGroup);
+        model.updateMatrixWorld(true);
+        // tank.js 现逻辑：第一件机枪网格的节点原点
+        const p = new THREE.Vector3(); mgMeshes[0].getWorldPosition(p);
+        // 兜底：节点原点不在机枪包围盒内 → 用首件（约定为枪架件）包围盒底面中心 = 枪架回转中心
+        const box = new THREE.Box3(); for (const m of mgMeshes) box.expandByObject(m);
+        const inBox = box.containsPoint(p);
+        if (!inBox) {
+          const b0 = new THREE.Box3().setFromObject(mgMeshes[0]);
+          p.set((b0.min.x + b0.max.x) / 2, b0.min.y, (b0.min.z + b0.max.z) / 2);
+        }
+        turretGroup.worldToLocal(p);
+        mgGroup.position.copy(p);
+        for (const m of mgMeshes) mgGroup.attach(m);
+        const mgFlip = cfg.mgFlipY ? -1 : 1;
+        mgGroup.rotation.set(0, cfg.mgFlipY ? Math.PI : 0, 0);   // 出厂朝后收纳 → 翻转成战斗朝向
+        model.updateMatrixWorld(true);
+        const bx = new THREE.Box3().setFromObject(mgGroup);
+        const mn = bx.min.clone(), mx = bx.max.clone();
+        mgGroup.worldToLocal(mn); mgGroup.worldToLocal(mx);
+        mgMuzzleLocal = new THREE.Vector3((mn.x + mx.x) / 2, mn.y + (mx.y - mn.y) * 0.72, mgFlip > 0 ? mx.z : mn.z);
+        console.log(key, '机枪支点兜底:', !inBox, 'mgMuzzleLocal:', mgMuzzleLocal.toArray().map(v => v.toFixed(2)));
+      }
+    }
+    if (cfg.parts.hidden) for (const n of cfg.parts.hidden) { const o = model.getObjectByName(n); if (o) o.visible = false; }
+
+    window.__parts = { turretGroup, barrelGroup, mgGroup };
+    // 标记
+    const mk = (arr, color, r) => { const s = sphere(color, r); s.position.fromArray(arr); group.add(s); return s; };
+    // 炮塔轴（绿圆柱）
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 3.4, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x44ff66, depthTest: false, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+    cyl.position.set(cfg.turretPivot[0], cfg.turretPivot[1] + 1.2, cfg.turretPivot[2]);
+    group.add(cyl);
+    mk(cfg.turretPivot, 0x44ff66);                       // 炮塔轴心（绿）
+    mk(cfg.barrelPivot, 0x44aaff);                       // 耳轴（蓝）
+    const muz = mk(cfg.muzzleLocal, 0xff3355, 0.11);     // 炮口（红）
+    for (const e of cfg.exhaustLocal) mk(e, 0xffa020);   // 排气（橙）
+    for (const t of cfg.trackLocal) mk(t, 0xdddddd, 0.06); // 扬尘（白）
+    if (mgMuzzleLocal) {
+      const p = mgMuzzleLocal.clone(); turretGroup.localToWorld(p); group.worldToLocal(p);
+      mk(p.toArray(), 0xff44dd, 0.09);                   // 机枪枪口（粉）
+    } else if (cfg.mgMuzzleLocal) {
+      mk(cfg.mgMuzzleLocal, 0xff44dd, 0.09);             // 虚拟机枪枪口（粉）
+    }
+    // 炮口射线
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 30)]);
+    const ray = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xff3355, depthTest: false, transparent: true, opacity: 0.5 }));
+    muz.add(ray);
+
+    anim = { turretGroup, barrelGroup, mgGroup, key };
+    const box = new THREE.Box3().setFromObject(model);
+    window.__modelBounds = box.clone();
+    const size = box.getSize(new THREE.Vector3());
+    document.getElementById('info').textContent =
+      `${key}\nbounds X[${box.min.x.toFixed(2)},${box.max.x.toFixed(2)}] Y[${box.min.y.toFixed(2)},${box.max.y.toFixed(2)}] Z[${box.min.z.toFixed(2)},${box.max.z.toFixed(2)}]\nsize=(${size.x.toFixed(2)}, ${size.y.toFixed(2)}, ${size.z.toFixed(2)})`;
+    setView(document.querySelector('#hud button[data-view].on')?.dataset.view || 'persp');
+  });
+}
+
+// 视角
+function setView(v) {
+  document.querySelectorAll('#hud button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  const box = window.__modelBounds || new THREE.Box3(new THREE.Vector3(-2, 0, -5), new THREE.Vector3(2, 3, 5));
+  const c = box.getCenter(new THREE.Vector3());
+  const r = Math.max(box.getSize(new THREE.Vector3()).x, box.getSize(new THREE.Vector3()).z) * 0.75 + 2;
+  if (v === 'side') camera.position.set(c.x + r * 0.55, c.y + r * 0.3, c.z), camera.lookAt(c.x, c.y, c.z);
+  if (v === 'top') camera.position.set(c.x, c.y + r * 0.62, c.z + 0.01), camera.lookAt(c.x, c.y, c.z);
+  if (v === 'front') camera.position.set(c.x, c.y + r * 0.35, c.z + r * 0.62), camera.lookAt(c.x, c.y, c.z);
+  if (v === 'persp') camera.position.set(c.x + r * 0.55, c.y + r * 0.42, c.z + r * 0.55), camera.lookAt(c.x, c.y, c.z);
+}
+document.querySelectorAll('#hud button[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
+document.querySelectorAll('#hud button[data-tank]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#hud button[data-tank]').forEach(x => x.classList.toggle('on', x === b));
+  build(b.dataset.tank);
+});
+document.getElementById('anim').onclick = () => animTurret = !animTurret;
+document.getElementById('pitch').onclick = () => animPitch = !animPitch;
+document.getElementById('mg').onclick = () => animMG = !animMG;
+let animTurret = false, animPitch = false, animMG = false;
+
+(function loop(t) {
+  requestAnimationFrame(loop);
+  if (anim) {
+    if (animTurret && anim.turretGroup) anim.turretGroup.rotation.y = Math.sin(t * 0.0006) * 0.7;
+    if (animPitch && anim.barrelGroup) anim.barrelGroup.rotation.x = Math.sin(t * 0.001) * 0.17;
+    if (animMG && anim.mgGroup) anim.mgGroup.rotation.y = Math.sin(t * 0.0012) * 1.2;
+  }
+  renderer.render(scene, camera);
+})(0);
+build('t-72b3');
+document.querySelector('#hud button[data-tank]').classList.add('on');
+</script>
+</body>
+</html>

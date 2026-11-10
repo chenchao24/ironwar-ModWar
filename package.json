@@ -1,0 +1,23 @@
+{
+  "name": "ironwar-tank",
+  "version": "1.0.0",
+  "description": "钢铁洪流 IRON WAR — 3D 坦克对战（Three.js/WebGL2）",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node scripts/build-release.mjs",
+    "preview": "node scripts/serve-dist.mjs",
+    "quarantine": "node scripts/quarantine.mjs",
+    "restore": "node scripts/quarantine.mjs --restore"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
+    "puppeteer-core": "^25.8.0",
+    "three": "^0.185.1"
+  }
+}

@@ -1,0 +1,686 @@
+/* ═══ 钢铁洪流 IRON WAR — 全局样式 ═══ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --amber: #e8a33d;
+  --amber-hi: #ffcf7a;
+  --olive: #6b7c4f;
+  --steel: #9aa5ad;
+  --blood: #c0392b;
+  --panel: rgba(14, 17, 14, 0.82);
+  --panel-line: rgba(232, 163, 61, 0.35);
+}
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0c0a;
+  font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; user-select: none; }
+#game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ── 屏幕层 ── */
+.screen { position: fixed; inset: 0; display: none; z-index: 10; }
+.screen.active { display: block; }
+
+/* ── 封面 ── */
+#screen-cover { cursor: pointer; z-index: 100; }
+.cover-bg { position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 120%, rgba(200, 90, 20, 0.35), transparent 55%),
+    radial-gradient(ellipse at 50% -20%, rgba(90, 110, 130, 0.4), transparent 60%),
+    linear-gradient(180deg, #10151a 0%, #1a1d16 55%, #0d0f0a 100%);
+  animation: coverPulse 6s ease-in-out infinite; }
+@keyframes coverPulse { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+.cover-content { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 60px; }
+.game-logo { text-align: center; }
+.logo-main { font-size: 88px; font-weight: 700; letter-spacing: 12px; color: var(--amber);
+  text-shadow: 0 0 30px rgba(232,163,61,.45), 0 4px 0 #7a5210, 0 8px 24px #000;
+  font-family: "Bahnschrift", "Arial Narrow", "Microsoft YaHei", sans-serif; }
+.logo-sub-cn { margin-top: 8px; font-size: 28px; font-weight: 500; letter-spacing: 8px; color: var(--steel);
+  font-family: "Bahnschrift", "Arial Narrow", "Microsoft YaHei", sans-serif; }
+.logo-sub { margin-top: 10px; font-size: 16px; letter-spacing: 8px; color: #7a7a6a; }
+.cover-hint { font-size: 20px; letter-spacing: 8px; color: #cfcfcf; }
+.blink { animation: blink 1.6s ease-in-out infinite; }
+@keyframes blink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* ── 主菜单 ── */
+#screen-menu { background: linear-gradient(100deg, rgba(8,10,8,.92) 30%, rgba(8,10,8,.25) 75%, transparent); }
+.menu-left { position: absolute; left: 7%; top: 0; height: 100%; width: 420px;
+  display: flex; flex-direction: column; justify-content: center; gap: 70px; }
+.menu-logo { font-size: 38px; font-weight: 700; letter-spacing: 6px; color: var(--amber);
+  font-family: "Bahnschrift", "Arial Narrow", "Microsoft YaHei", sans-serif; text-shadow: 0 0 22px rgba(232,163,61,.35); }
+.menu-logo span { display: block; font-size: 15px; letter-spacing: 8px; color: var(--steel); margin-top: 6px; }
+.menu-items { display: flex; flex-direction: column; gap: 18px; }
+.menu-btn { position: relative; width: 100%; padding: 16px 26px; text-align: left;
+  background: var(--panel); border: 1px solid var(--panel-line); color: #e8e2d2;
+  font-size: 22px; letter-spacing: 6px; cursor: pointer; transition: all .18s;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%); font-family: inherit; }
+.menu-btn:hover:not(.disabled) { background: rgba(232,163,61,.18); border-color: var(--amber);
+  transform: translateX(10px); color: var(--amber-hi); }
+.menu-btn .btn-note { display: block; font-size: 12px; letter-spacing: 3px; color: #8a8a7a; margin-top: 4px; }
+.menu-btn.disabled { opacity: .38; cursor: not-allowed; }
+.menu-btn.primary { background: linear-gradient(90deg, rgba(232,163,61,.85), rgba(180,110,30,.85));
+  color: #14120a; font-weight: 700; border: none; }
+.menu-btn.primary:hover { filter: brightness(1.15); color: #000; }
+.menu-btn.small { width: auto; padding: 10px 30px; font-size: 16px; white-space: nowrap; }
+.menu-footer { position: absolute; right: 24px; bottom: 16px; color: #5a6058; font-size: 12px; letter-spacing: 2px; }
+
+/* ── 设置弹窗 ── */
+.modal { position: fixed; inset: 0; display: none; z-index: 60; background: rgba(0,0,0,.6); }
+.modal.active { display: flex; align-items: center; justify-content: center; }
+.modal-box { width: 460px; background: var(--panel); border: 1px solid var(--panel-line);
+  padding: 30px 36px; backdrop-filter: blur(6px); }
+.modal-title { font-size: 26px; letter-spacing: 10px; color: var(--amber); margin-bottom: 26px; text-align: center; }
+.setting-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.setting-row label { width: 72px; color: #cfc9b8; font-size: 15px; letter-spacing: 2px; }
+.setting-row input[type=range] { flex: 1; accent-color: var(--amber); }
+.setting-row select { flex: 1; background: #1a1d16; color: #e8e2d2; border: 1px solid var(--panel-line);
+  padding: 6px; font-family: inherit; }
+.set-val { width: 34px; text-align: right; color: var(--amber-hi); font-size: 14px; }
+/* BGM 开关（扁平按钮，与设置面板同风格） */
+.bgm-toggle { width: 44px; padding: 5px 0; background: #1a1d16; color: #7a756a;
+  border: 1px solid var(--panel-line); font-family: inherit; font-size: 14px; letter-spacing: 2px;
+  cursor: pointer; }
+.bgm-toggle.on { color: var(--amber-hi); border-color: var(--amber); }
+.modal-actions { display: flex; justify-content: center; margin-top: 10px; }
+
+/* ── 选车 ── */
+#screen-select { background: linear-gradient(180deg, rgba(8,10,8,.88), rgba(8,10,8,.65));
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 34px; }
+#screen-select.active { display: flex; }
+.select-title { font-size: 34px; letter-spacing: 12px; color: var(--amber-hi); }
+.select-grid { display: flex; gap: 22px; }
+.tank-card { width: 250px; min-height: 240px; background: var(--panel); border: 1px solid var(--panel-line);
+  padding: 20px; transition: all .2s; position: relative; }
+.tank-card.selected { border-color: var(--amber); box-shadow: 0 0 26px rgba(232,163,61,.28); cursor: pointer; }
+.tank-card.locked { opacity: .35; filter: grayscale(.8); }
+.tank-name { font-size: 21px; color: var(--amber-hi); letter-spacing: 2px; }
+.tank-class { font-size: 12px; color: #8a8a7a; margin: 6px 0 16px; letter-spacing: 2px; }
+.tank-stats { display: flex; flex-direction: column; gap: 8px; }
+.stat { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #b8b2a2; }
+.stat span { width: 30px; }
+.stat .bar { flex: 1; height: 6px; background: #22261f; }
+.stat .bar i { display: block; height: 100%; background: linear-gradient(90deg, #7a5210, var(--amber)); }
+.tank-desc { margin-top: 14px; font-size: 11px; color: #7d8478; line-height: 1.6; }
+.lock-tag { margin-top: 12px; display: inline-block; padding: 3px 10px; font-size: 12px;
+  border: 1px solid #666; color: #999; letter-spacing: 3px; }
+.select-actions { display: flex; gap: 18px; }
+
+/* ── HUD ── */
+#hud { pointer-events: none; z-index: 20; }
+#crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 120px; height: 120px; }
+.ch-ring { position: absolute; inset: 0; border: 1.5px solid rgba(232,163,61,.85); border-radius: 50%;
+  transition: transform .12s; }
+.ch-dot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px;
+  background: var(--amber-hi); border-radius: 50%; box-shadow: 0 0 6px var(--amber); }
+#reload-ring { position: absolute; inset: -8px; }
+#reload-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.rr-bg, .rr-fg { fill: none; stroke-width: 3; }
+.rr-bg { stroke: rgba(255,255,255,.12); }
+.rr-fg { stroke: var(--amber); stroke-dasharray: 163.3; stroke-dashoffset: 0; }
+#aim-info { position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%);
+  white-space: nowrap; font-size: 13px; color: var(--amber-hi); letter-spacing: 1px; text-shadow: 0 0 4px #000; }
+#hit-marker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.6);
+  font-size: 44px; color: #ff5030; opacity: 0; font-weight: 900; text-shadow: 0 0 12px rgba(255,60,20,.8); }
+#hit-marker.show { animation: hitPop .45s ease-out; }
+@keyframes hitPop { 0% { opacity: 1; transform: translate(-50%,-50%) scale(1.25); } 100% { opacity: 0; transform: translate(-50%,-50%) scale(.7); } }
+#pen-marker { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: 15px;
+  color: #ffb060; letter-spacing: 2px; opacity: 0; text-shadow: 0 0 6px #000; }
+#pen-marker.show { animation: penFade 1.4s ease-out; }
+@keyframes penFade { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+#hud-bottom-left { position: absolute; left: 26px; bottom: 24px; font-family: "Segoe UI", system-ui, sans-serif; }
+#hp-panel { padding: 6px 4px; width: 300px; }
+#hp-label { font-size: 14px; color: var(--amber-hi); letter-spacing: 2px; margin-bottom: 7px; text-shadow: 0 1px 3px #000; }
+#hp-bar { position: relative; height: 14px; background: rgba(40,30,20,.35); border-bottom: 1px solid rgba(232,163,61,.25); }
+#hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #7ba23f, #a8c256); transition: width .25s, background .3s; }
+#hp-fill.hurt { background: linear-gradient(90deg, #b08a2e, #d8b13c); }
+#hp-fill.critical { background: linear-gradient(90deg, #a03428, #d84a30); }
+#hp-text { position: absolute; right: 6px; top: 0; font-size: 12px; line-height: 14px; color: #fff; text-shadow: 0 1px 2px #000; font-family: "Consolas", monospace; }
+#status-tags { margin-top: 8px; display: flex; gap: 8px; font-size: 12px; }
+.status-tag { padding: 0; letter-spacing: 1.5px; text-shadow: 0 1px 3px #000; }
+.status-tag.fire { color: #ff7040; animation: blink 1s infinite; }
+
+/* ── 模块状态条（HP 面板下方）── */
+#mod-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+#mod-chips:empty { margin-top: 0; }
+.mod-chip { position: relative; padding: 3px 0 3px 8px; font-size: 12px; letter-spacing: 1px;
+  color: #e8e2d2; text-shadow: 0 1px 3px #000; }
+.mod-chip::before { content: ''; position: absolute; left: 0; top: 1px; bottom: 1px; width: 2px; background: var(--amber); }
+.mod-chip.track { color: #a8ccf0; } .mod-chip.track::before { background: #5aa2e8; }
+.mod-chip.engine { color: var(--amber-hi); } .mod-chip.engine::before { background: var(--amber); }
+.mod-chip.ring { color: #ecd06a; } .mod-chip.ring::before { background: #e8c33d; }
+.mod-chip.loader { color: #f0a070; } .mod-chip.loader::before { background: #e8763d; }
+.mod-chip.fire { color: #ff7040; animation: blink 0.8s infinite; } .mod-chip.fire::before { background: #ff4a20; }
+
+#hud-bottom-right { position: absolute; right: 26px; bottom: 24px; text-align: right; font-family: "Segoe UI", system-ui, sans-serif; }
+#speed-panel { padding: 6px 4px; width: 148px; }
+.sp-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; }
+#speed-val { font-size: 32px; color: #e8e2d2; font-weight: 700; font-family: "Consolas", monospace; text-shadow: 0 1px 4px #000; }
+#speed-panel .unit { font-size: 12px; color: #8a8a7a; text-shadow: 0 1px 2px #000; }
+#speed-bar { margin-top: 7px; height: 3px; background: rgba(40,30,20,.35); }
+#speed-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--amber), var(--amber-hi)); transition: width .15s; }
+#gear-panel { margin-top: 6px; display: inline-block; padding: 4px 0; }
+#gear-val { font-size: 16px; color: var(--amber-hi); letter-spacing: 3px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+.sp-label, .gp-label { font-size: 10px; color: #8a8a7a; letter-spacing: 2px; text-shadow: 0 1px 2px #000; }
+.sp-label { display: block; text-align: right; margin-bottom: 2px; }
+.en-label { font-size: 10px; color: #8a8a7a; letter-spacing: 2px; }
+
+#hud-top { position: absolute; top: 18px; left: 0; width: 100%; font-family: "Segoe UI", system-ui, sans-serif; }
+#objective { position: absolute; left: 26px; top: 0;
+  padding: 6px 0; font-size: 15px; letter-spacing: 4px; color: #e8e2d2; text-shadow: 0 1px 4px #000; }
+#enemy-counter { position: absolute; left: 26px; top: 42px; font-size: 13px; color: #c9c2b0; letter-spacing: 2px;
+  padding: 2px 0; text-shadow: 0 1px 3px #000; }
+#enemy-counter b { color: #ff6040; font-size: 16px; font-family: "Consolas", monospace; }
+
+/* ── 战斗时限倒计时（敌方剩余下方；<60s 变红闪烁） ── */
+#time-counter { position: absolute; left: 26px; top: 66px; font-size: 13px; color: #c9c2b0; letter-spacing: 2px;
+  padding: 2px 0; text-shadow: 0 1px 3px #000; }
+#time-counter b { color: var(--amber, #e8a33d); font-size: 16px; font-family: "Consolas", monospace; }
+#time-counter.low b { color: #ff4030; animation: blink 1s steps(2) infinite; }
+
+/* ── 罗盘卡尺（顶部居中；刻度带 JS 生成，2px/°，-180°~540° 双圈防 0/360 跳变） ── */
+#compass { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 340px; text-align: center; }
+#csWindow { position: relative; height: 30px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+#csTicks { position: absolute; top: 0; left: 0; height: 100%; width: 1500px; will-change: transform; }
+.cs-tick { position: absolute; top: 4px; width: 1px; height: 6px; background: rgba(232,163,61,.4); }
+.cs-tick.major { top: 3px; height: 9px; width: 2px; background: rgba(232,163,61,.85); }
+.cs-label { position: absolute; top: 13px; transform: translateX(-50%); font-size: 11px; letter-spacing: 1px;
+  color: var(--amber-hi); font-family: "Consolas", monospace; text-shadow: 0 1px 2px #000; }
+.cs-label.num { font-size: 9px; color: rgba(232,163,61,.55); }
+#csNeedle { position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 7px solid var(--amber); filter: drop-shadow(0 0 3px rgba(232,163,61,.8)); }
+#compassDeg { margin-top: 4px; display: inline-block; color: var(--amber-hi); font-size: 12px; letter-spacing: 2px;
+  font-family: "Consolas", monospace; padding: 0; text-shadow: 0 1px 3px #000; }
+
+/* ── 激光告警 / 压制提示（罗盘下方 100px 居中；告警红底白字脉冲光晕） ── */
+#laser-warning { position: absolute; left: 50%; top: 170px; transform: translateX(-50%);
+  padding: 5px 20px; background: rgba(186, 22, 10, .85); color: #fff;
+  font-size: 15px; font-weight: 700; letter-spacing: 4px; border-radius: 3px;
+  text-shadow: 0 1px 3px #000; opacity: 0; transition: opacity .25s;
+  pointer-events: none; animation: none; }
+#laser-warning.show { opacity: 1; animation: lasePulse 1s ease-in-out infinite; }
+@keyframes lasePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 40, 20, .35); }
+  50% { box-shadow: 0 0 22px rgba(255, 70, 30, .8); }
+}
+#laser-suppress { position: absolute; left: 50%; top: 214px; transform: translateX(-50%);
+  padding: 4px 16px; background: rgba(18, 58, 28, .8); color: #c8ffb0;
+  font-size: 13px; font-weight: 700; letter-spacing: 3px; border-radius: 3px;
+  text-shadow: 0 1px 3px #000; opacity: 0; transition: opacity .25s; pointer-events: none; }
+#laser-suppress.show { opacity: 1; }
+#laser-suppress b { color: #fff; font-family: "Consolas", monospace; font-size: 15px; }
+
+/* ── 命中记录（小地图下方 30px，column-reverse） ── */
+#hitlog { position: absolute; right: 26px; top: 260px; width: 250px;
+  display: flex; flex-direction: column-reverse; gap: 4px; text-align: right; }
+.hitlog-item { color: #d8d0b0; font-size: 13px; letter-spacing: 1px;
+  padding: 2px 0; transition: opacity .5s; text-shadow: 0 1px 3px #000; }
+.hitlog-item.good { color: #b8d890; }
+.hitlog-item.bad { color: #ff9060; }
+.hitlog-item.fadeout { opacity: 0; }
+
+/* ── 烟雾弹计数（左下，HP 面板上方） ── */
+#smoke-panel { position: absolute; left: 26px; bottom: 110px; padding: 4px 0;
+  font-size: 13px; letter-spacing: 2px; color: #c9c2b0; text-shadow: 0 1px 3px #000;
+  font-family: "Segoe UI", system-ui, sans-serif; }
+#smoke-panel .smk-label { font-size: 10px; color: #8a8a7a; letter-spacing: 2px; }
+#smoke-count { color: var(--amber-hi); font-size: 16px; font-weight: 700;
+  font-family: "Consolas", monospace; text-shadow: 0 1px 3px #000; }
+#smoke-count.empty { color: #6a6a5a; }
+
+/* ── 弹药面板（贴近左缘，AP/HEAT/HE/MG 纵排数字卡 + 右侧绿色余量条） ── */
+#ammo-panel { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 6px; z-index: 5;
+  pointer-events: auto;          /* #hud 为 none，此处恢复点击/悬停 */
+  font-family: "Segoe UI", system-ui, sans-serif; }
+/* 卡身纯透明，仅留琥珀描边 */
+.ammo-item { position: relative; width: 40px; height: 46px; cursor: pointer;
+  border: 1px solid rgba(232,163,61,0.35); background: transparent;
+  display: flex; flex-direction: column; transition: border-color .15s; }
+.ammo-head { height: 13px; line-height: 12px; text-align: center;
+  color: #fff; font-size: 8px; font-weight: 700; letter-spacing: 1px;
+  white-space: nowrap; overflow: hidden; }
+/* 各弹种标题底色：AP 蓝 / HEAT 红 / HE 黄 / MG 橄榄灰 */
+.ammo-item.ap .ammo-head   { background: rgba(61,106,158,0.88); }
+.ammo-item.heat .ammo-head{ background: rgba(168,80,58,0.88); }
+.ammo-item.he .ammo-head  { background: rgba(176,148,48,0.88); }
+.ammo-item.mg .ammo-head  { background: rgba(96,106,80,0.88); }
+/* 键位徽标（1/2/3 单独标注，键帽样式） */
+.ammo-key { display: inline-block; width: 8px; height: 8px; margin-right: 2px;
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 2px; font-size: 6.5px; line-height: 7px; font-style: normal;
+  font-family: "Consolas", monospace; vertical-align: middle; text-align: center; }
+/* 炮弹数字加大；MG 备弹 4 位数缩小（透明背景下加双影保证可读） */
+.ammo-num { flex: 1; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 16px; font-weight: 700; font-family: "Consolas", monospace;
+  text-shadow: 0 1px 3px #000, 0 0 5px rgba(0,0,0,.9); }
+.ammo-item.mg .ammo-num { font-size: 11px; }
+/* 低于 20% 淡红 */
+.ammo-item.low .ammo-num { color: #ff9a88; text-shadow: 0 1px 3px #000, 0 0 6px rgba(255,90,70,.5); }
+.ammo-item.low .ammo-bar i { background: #ff8a78; }
+/* 当前弹种高亮（悬停微亮）：仅描边+光晕，无底色 */
+.ammo-item:hover { border-color: rgba(232,163,61,0.7); }
+.ammo-item.active { border-color: var(--amber); box-shadow: 0 0 10px rgba(232,163,61,0.3); }
+/* 右侧余量指示条：百分比高度自底向上填充，绿色 */
+.ammo-bar { position: absolute; left: calc(100% + 3px); top: 0; height: 100%; width: 3px;
+  background: rgba(255,255,255,0.12); }
+.ammo-bar i { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+  background: #7fe060; transition: height 0.2s; }
+/* MG 自动射击开关（MG 卡下方，点击/M 键切换）——透明底 */
+.ammo-auto { display: flex; align-items: center; justify-content: space-between;
+  width: 40px; height: 15px; padding: 0 4px; cursor: pointer; box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.18); background: transparent;
+  transition: border-color .15s; }
+.ammo-auto:hover { border-color: rgba(255,255,255,0.4); }
+.auto-label { font-size: 8px; color: #e8e2d2; letter-spacing: 0.5px; font-weight: 700;
+  text-shadow: 0 1px 2px #000; }
+.auto-state { font-size: 8px; color: #9a9a8a; font-weight: 700; text-shadow: 0 1px 2px #000; }
+.ammo-auto.on { border-color: rgba(127,224,96,0.6); background: rgba(127,224,96,0.1); }
+.ammo-auto.on .auto-label { color: #b8d890; }
+.ammo-auto.on .auto-state { color: #7fe060; }
+/* 悬停弹种详细介绍（挂在 #hud 下，随战斗界面显隐；指针事件穿透） */
+#ammo-tip { position: fixed; display: none; z-index: 300; width: 268px;
+  background: rgba(8,10,8,0.92); border: 1px solid var(--panel-line);
+  padding: 10px 12px; pointer-events: none; }
+#ammo-tip .tip-title { font-size: 12px; color: var(--amber-hi); letter-spacing: 1px;
+  margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid rgba(232,163,61,0.2); }
+#ammo-tip .tip-title b { font-family: "Consolas", monospace; }
+#ammo-tip .tip-row { display: flex; justify-content: space-between; gap: 10px;
+  font-size: 10.5px; padding: 1.5px 0; color: #b8b2a2; }
+#ammo-tip .tip-row b { color: #e8e2d2; font-weight: 400; font-family: "Consolas", monospace; }
+#ammo-tip .tip-note { margin-top: 6px; font-size: 10.5px; line-height: 1.65; color: #cfc9b8; }
+
+/* ── 消耗品（烟雾弹右侧同行） ── */
+#consum-panel { position: absolute; left: 104px; bottom: 110px; display: flex; gap: 14px;
+  font-family: "Segoe UI", system-ui, sans-serif; }
+.cons-item { display: flex; align-items: center; gap: 5px; }
+.cons-key { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
+  border: 1px solid #6a6a5a; border-radius: 3px; font-size: 10px; color: #c9c2b0;
+  font-family: "Consolas", monospace; }
+.cons-name { font-size: 11px; letter-spacing: 2px; color: #c9c2b0; text-shadow: 0 1px 3px #000; }
+.cons-item.used { opacity: 0.32; }
+.cons-item.used .cons-key { text-decoration: line-through; }
+
+/* ── 防护体系状态（烟雾弹行上方：爆反板 / APS / 观瞄，单行横排，扁平蓝色块） ── */
+#prot-panel { position: absolute; left: 26px; bottom: 134px; display: flex; align-items: stretch; gap: 6px;
+  pointer-events: none; font-family: "Segoe UI", system-ui, sans-serif; }
+.prot-row { display: flex; align-items: center; gap: 6px; padding: 4px 9px; background: #2a4a6a; }
+.prot-label { font-size: 10px; color: #7ab0d8; letter-spacing: 2px; }
+.prot-val { font-size: 12px; color: #dceaf5; letter-spacing: 1px; white-space: nowrap;
+  font-family: "Consolas", monospace; }
+.prot-row.warn .prot-val { color: #ffd070; }
+.prot-row.dead .prot-val { color: #ff7050; }
+
+#damage-vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(180,20,10,.55) 100%); }
+#damage-indicator { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px;
+  transform: translate(-50%,-50%); pointer-events: none; }
+.dmg-arc { position: absolute; left: 50%; top: 50%; width: 200px; height: 14px; margin: -7px -100px;
+  background: radial-gradient(ellipse at center, rgba(255,60,30,.9), transparent 70%);
+  clip-path: polygon(35% 0, 65% 0, 100% 100%, 0 100%); opacity: 0; }
+.dmg-arc.show { animation: arcFade 1.2s ease-out; }
+@keyframes arcFade { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+#reload-warning { position: absolute; left: 50%; top: 60%; transform: translateX(-50%);
+  font-size: 14px; color: #d8b13c; letter-spacing: 3px; opacity: 0; transition: opacity .2s; }
+#reload-warning.show { opacity: 1; }
+#battle-message { position: absolute; left: 50%; top: 34%; transform: translateX(-50%);
+  font-size: 30px; letter-spacing: 10px; color: var(--amber-hi); text-shadow: 0 0 18px rgba(232,163,61,.6), 0 2px 4px #000;
+  opacity: 0; white-space: nowrap; }
+#battle-message.show { animation: msgFade 2.6s ease-out; }
+@keyframes msgFade { 0% { opacity: 0; transform: translateX(-50%) scale(1.2); } 12% { opacity: 1; transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ── 结算 ── */
+#screen-pause { background: rgba(5,6,5,.78); z-index: 40; }
+#pause-box { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  text-align: center; background: var(--panel); border: 1px solid var(--panel-line); padding: 50px 80px; }
+#pause-title { font-size: 56px; font-weight: 700; letter-spacing: 16px; color: var(--amber); margin-bottom: 30px;
+  font-family: "Bahnschrift", "Arial Narrow", "Microsoft YaHei", sans-serif; }
+#pause-box .select-actions { justify-content: center; }
+
+#screen-result { background: rgba(5,6,5,.78); z-index: 40; }
+#result-box { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  text-align: center; background: var(--panel); border: 1px solid var(--panel-line); padding: 50px 80px; }
+#result-title { font-size: 56px; font-weight: 700; letter-spacing: 16px; color: var(--amber); margin-bottom: 18px;
+  font-family: "Bahnschrift", "Arial Narrow", "Microsoft YaHei", sans-serif; }
+#result-title.defeat { color: var(--blood); }
+#result-title.draw { color: #9aa4a8; }
+#result-detail { font-size: 15px; color: #b8b2a2; letter-spacing: 2px; line-height: 2; margin-bottom: 30px; }
+#result-box .select-actions { justify-content: center; }
+
+/* ── 加载 ── */
+#loading-overlay { position: fixed; inset: 0; z-index: 200; background: #0a0c0a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+  transition: opacity .5s; }
+#loading-overlay.done { opacity: 0; pointer-events: none; }
+.load-text { color: var(--amber); letter-spacing: 6px; font-size: 16px; }
+.load-bar { width: 320px; height: 4px; background: #22261f; }
+.load-bar i { display: block; height: 100%; width: 0; background: var(--amber); transition: width .2s; }
+
+/* ── 缩圈准星 ── */
+#crosshair { transition: none; }
+#crosshair.aimed .ch-ring { border-color: #7fe060; box-shadow: 0 0 8px rgba(127,224,96,.6); }
+#aim-progress { position: absolute; top: 108%; width: 100%; text-align: center; font-size: 12px;
+  color: #d8b13c; letter-spacing: 2px; text-shadow: 0 0 4px #000; }
+#aim-progress.aimed { color: #7fe060; }
+#aim-info { display: flex; gap: 8px; }
+#aim-range { color: #e8e2d2; }
+#aim-target { color: #ff7040; }
+
+/* ── 狙击瞄准镜 ── */
+#gunsight { position: absolute; inset: 0; pointer-events: none; }
+#gunsight.hidden { display: none; }
+#gs-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* 分划通用机制：双层描边（gs-out 底衬 + gs-ink 主线），零 filter 任何背景可见且锐利细致；
+   六国风格 gs-ret-xx 只覆盖颜色，结构由 js/reticles.js 按坦克生成 */
+#gs-svg .gs-out { stroke: rgba(255,255,255,.5); fill: none; stroke-linecap: round; }
+#gs-svg .gs-ink { stroke: rgba(8,10,6,.95); fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#gs-svg .gs-num { fill: rgba(8,10,6,.88); stroke: rgba(255,255,255,.55); stroke-width: 2.6; paint-order: stroke fill;
+  font-size: 12px; font-family: "Consolas", monospace; }
+#gs-svg .gs-acc   { stroke: var(--amber); fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#gs-svg .gs-acc-f { fill: var(--amber); stroke: none; }
+#gs-svg .gs-dot   { fill: rgba(190,30,18,.95); stroke: rgba(255,255,255,.6); stroke-width: 1.4; paint-order: stroke fill; }
+/* 俄系备用瞄点（菱形+小圆点，实心黑带白描边） */
+#gs-svg .gs-aux   { fill: rgba(8,10,6,.88); stroke: rgba(255,255,255,.5); stroke-width: 1.4; paint-order: stroke fill; }
+/* 俄系：黑线白衬 + 琥珀强调（苏式炮队镜，T-90M/T-80U/T-90SM/T-14） */
+#gs-svg .gs-ret-ru .gs-acc   { stroke: #e8a33d; }
+#gs-svg .gs-ret-ru .gs-acc-f { fill: #e8a33d; }
+/* 美系 M1：橄榄绿主线 + 荧光绿强调（夜视观感，M1A1/M1A2） */
+#gs-svg .gs-ret-us .gs-ink   { stroke: rgba(26,48,22,.95); }
+#gs-svg .gs-ret-us .gs-acc   { stroke: #7dd87d; }
+#gs-svg .gs-ret-us .gs-acc-f { fill: #7dd87d; }
+/* 中系 99A：黑线 + 红强调（缺口瞄准圆环） */
+#gs-svg .gs-ret-cn .gs-acc   { stroke: #e04838; }
+#gs-svg .gs-ret-cn .gs-acc-f { fill: #e04838; }
+#gs-svg .gs-ret-cn .gs-acc-t { fill: #e04838; }
+/* 英系挑战者：黑线 + 琥珀黄强调（倒 T 水平基准） */
+#gs-svg .gs-ret-uk .gs-acc   { stroke: #e8c04a; }
+#gs-svg .gs-ret-uk .gs-acc-f { fill: #e8c04a; }
+/* 德系豹2：黑线 + 冷蓝白强调（EMES-15 蔡司光学） */
+#gs-svg .gs-ret-de .gs-acc   { stroke: #a8c8e8; }
+#gs-svg .gs-ret-de .gs-acc-f { fill: #a8c8e8; }
+/* 试验车 AbramsX：青色数字 HUD（底衬青、主线深青） */
+#gs-svg .gs-ret-x .gs-out   { stroke: rgba(125,232,255,.65); }
+#gs-svg .gs-ret-x .gs-ink   { stroke: rgba(8,36,44,.92); }
+#gs-svg .gs-ret-x .gs-num   { fill: rgba(8,36,44,.92); stroke: rgba(125,232,255,.75); }
+#gs-svg .gs-ret-x .gs-acc   { stroke: #7de8ff; }
+#gs-svg .gs-ret-x .gs-acc-f { fill: #7de8ff; }
+#gs-svg .gs-ret-x .gs-acc-t { fill: #7de8ff; }
+/* 法系勒克莱尔：黑线白衬 + 法国蓝强调、红点缀（SAGEM 三色） */
+#gs-svg .gs-ret-fr .gs-acc   { stroke: #6ea8ff; }
+#gs-svg .gs-ret-fr .gs-acc-f { fill: #6ea8ff; }
+/* 以色列梅卡瓦：黑线白衬 + 钴蓝强调（BMS 大卫之星标识） */
+#gs-svg .gs-ret-il .gs-acc   { stroke: #4d7dff; }
+#gs-svg .gs-ret-il .gs-acc-f { fill: #4d7dff; }
+/* 日系 10式：黑线白衬 + 绯红强调 + 樱粉读数（陆自观瞄） */
+#gs-svg .gs-ret-jp .gs-acc   { stroke: #ff7d6b; }
+#gs-svg .gs-ret-jp .gs-acc-f { fill: #ff7d6b; }
+#gs-svg .gs-ret-jp .gs-num   { fill: rgba(40,8,10,.88); stroke: rgba(255,179,193,.8); }
+/* KF51 黑豹：荧光黄绿全息（未来感数字火控，底衬亮绿、主线深底） */
+/* KF51 黑豹：科技蓝 NG-FCS（德系 EMES 骨架 + 大数据全息读数，底衬亮蓝、主线深底） */
+#gs-svg .gs-ret-nx .gs-out   { stroke: rgba(92,178,255,.55); }
+#gs-svg .gs-ret-nx .gs-ink   { stroke: rgba(8,22,38,.92); }
+#gs-svg .gs-ret-nx .gs-num   { fill: rgba(8,22,38,.92); stroke: rgba(92,178,255,.8); }
+#gs-svg .gs-ret-nx .gs-acc   { stroke: #5cb2ff; }
+#gs-svg .gs-ret-nx .gs-acc-f { fill: #5cb2ff; }
+#gs-svg .gs-ret-nx .gs-acc-t { fill: #5cb2ff; }
+/* 装填大光圈（去 filter，靠 gsr-bg 衬底保证对比） */
+.gsr-bg { fill: none; stroke: rgba(10,12,8,.6); stroke-width: 4; }
+.gsr-fg { fill: none; stroke: var(--amber); stroke-width: 3.5; stroke-dasharray: 364.4; stroke-dashoffset: 0; stroke-linecap: round; }
+.gsr-fg.ready { stroke: #7fe060; }
+#gs-reload-text { fill: var(--amber); stroke: rgba(0,0,0,.75); stroke-width: 3; paint-order: stroke fill;
+  font-size: 15px; font-family: "Consolas", monospace; letter-spacing: 1.5px; }
+#gs-reload-text.ready { fill: #7fe060; }
+/* 镜内散布虚线圈（JS 实时驱动；box-shadow 替代 filter，零模糊开销） */
+#gs-disp { position: absolute; left: 50%; top: 50%; width: 80px; height: 80px; transform: translate(-50%,-50%);
+  border: 1.5px dashed rgba(12,14,9,.85); border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.3); }
+/* 开炮白闪 */
+#gs-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+#gs-flash.show { animation: gsFlash .5s ease-out; }
+@keyframes gsFlash { 0% { opacity: .85; } 100% { opacity: 0; } }
+/* 激光致盲白幕（被敌方压制器照射：快亮 .18s / 慢灭 .8s；盖过白闪层置 DOM 末尾） */
+#gs-blind { position: absolute; inset: 0; z-index: 6; background: #f7f6ee; opacity: 0;
+  transition: opacity .8s ease; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; }
+#gs-blind.on { opacity: 1; transition: opacity .18s ease-out; }
+#gs-blind span { color: #23231e; font: bold 20px/1.4 "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 8px; opacity: .5; }
+#gs-readouts { position: absolute; left: 50%; bottom: 3.2%; transform: translateX(-50%);
+  display: flex; gap: 26px; font-family: "Consolas", monospace; }
+.gs-ro { color: #cfe0b8; font-size: 15px; letter-spacing: 1px; text-shadow: 0 0 6px rgba(0,0,0,.8); }
+#gs-reload.ready { color: #7fe060; }
+#gs-target { color: #ff9060; }
+/* 热像仪指示：默认暗灰（未装备/未开启），激活琥珀 */
+#gs-ir { color: #4a4f42; }
+#gs-ir.on { color: #ffb32e; text-shadow: 0 0 10px rgba(255,179,46,.7); }
+
+/* ── 小地图 ── */
+#minimap { position: absolute; right: 22px; top: 22px; width: 208px; height: 208px;
+  border-radius: 50%; border: 2px solid rgba(232,163,61,.4);
+  background: rgba(10,12,10,.55); box-shadow: 0 0 18px rgba(0,0,0,.5); }
+
+/* ── 敌标 ── */
+#markers { position: absolute; inset: 0; overflow: hidden; }
+.enemy-marker { position: absolute; transform: translate(-50%, -100%); text-align: center; width: 90px; }
+.em-hp { width: 64px; height: 5px; margin: 0 auto 2px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.25); }
+.em-hp i { display: block; height: 100%; background: #7fe060; }
+.em-hp i.mid { background: #e8c33d; }
+.em-hp i.low { background: #e04a30; }
+.em-dist { font-size: 11px; color: #ffb090; text-shadow: 0 1px 2px #000; }
+.em-icon { display: block; color: #ff5030; font-size: 14px; line-height: 1; text-shadow: 0 0 4px #000; }
+/* 失联敌标：灰色问号，无血条 */
+.enemy-marker.lost .em-hp { opacity: 0; }
+.enemy-marker.lost .em-icon { color: #9a9a8a; font-size: 18px; font-weight: 700; }
+.enemy-marker.lost { opacity: 0.7; }
+
+/* ── 伤害飘字 ── */
+.dmg-num { position: absolute; font-size: 19px; font-weight: 700; font-family: "Consolas", monospace;
+  color: #ffb060; text-shadow: 0 0 6px rgba(0,0,0,.9); pointer-events: none;
+  animation: dmgFloat 0.95s ease-out forwards; }
+.dmg-num.kill { color: #ff5030; font-size: 24px; }
+.dmg-num.bounce { color: #b8c4cc; font-size: 15px; }
+.dmg-num.mod-track { color: #6ab0ff; font-size: 15px; }
+.dmg-num.mod-fire { color: #ff4a20; font-size: 16px; }
+.dmg-num.mod-module { color: #ff9030; font-size: 15px; }
+@keyframes dmgFloat { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-46px); } }
+
+/* ═══ 机库页（选车）· 全屏展示台 + 悬浮面板 ═══ */
+#screen-hangar { pointer-events: none; }
+#screen-hangar .fh-panel, #screen-hangar .fh-pager,
+#screen-hangar .fh-select,
+#screen-hangar .fh-back, #screen-hangar .fh-hint { pointer-events: auto; }
+.fh-hint {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; letter-spacing: 3px; color: rgba(255,255,255,0.35);
+  font-family: "Consolas", monospace;
+}
+.fh-pager {
+  position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 4; display: flex; align-items: center; gap: 16px;
+  background: rgba(8,10,8,0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(232,163,61,0.25); border-radius: 40px;
+  padding: 7px 18px; box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+}
+.fh-pager-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--panel-line); background: rgba(0,0,0,0.3);
+  color: var(--amber-hi); font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; user-select: none;
+}
+.fh-pager-btn:hover { background: rgba(232,163,61,0.2); border-color: var(--amber-hi); }
+.fh-pager-name {
+  font-size: 17px; letter-spacing: 3px; color: var(--amber);
+  min-width: 140px; text-align: center;
+}
+/* ── 快速选择下拉（翻页按钮下方 30px）── */
+.fh-select {
+  position: absolute; top: 102px; left: 50%; transform: translateX(-50%);
+  z-index: 5; width: 248px;
+}
+.fh-select-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  background: rgba(8,10,8,0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(232,163,61,0.25); border-radius: 20px;
+  padding: 6px 14px; cursor: pointer; transition: all 0.2s; user-select: none;
+}
+.fh-select-btn:hover, .fh-select.open .fh-select-btn {
+  background: rgba(232,163,61,0.12); border-color: var(--amber-hi);
+}
+.fh-select-flag {
+  width: 24px; height: auto; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.15);
+}
+.fh-select-cur {
+  flex: 1; text-align: left; font-size: 13px; letter-spacing: 2px;
+  color: var(--amber); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fh-select-arrow { font-size: 11px; color: var(--amber-hi); transition: transform 0.2s; }
+.fh-select.open .fh-select-arrow { transform: rotate(180deg); }
+.fh-select-list {
+  position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+  max-height: min(58vh, 540px); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(8, 10, 8, 0.88);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(232,163,61,0.25); border-radius: 5px;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.55);
+  padding: 5px; display: none;
+}
+.fh-select.open .fh-select-list { display: block; }
+.fh-select-item {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border: 1px solid transparent; border-radius: 3px;
+  background: transparent; color: #d9d9d9; font-size: 13px; letter-spacing: 1px;
+  cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.fh-select-item img {
+  width: 22px; height: auto; border-radius: 2px; flex: none;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12);
+}
+.fh-select-item:hover { background: rgba(232,163,61,0.15); border-color: rgba(232,163,61,0.3); color: #ffe8b0; }
+.fh-select-item.active { background: rgba(232,163,61,0.22); border-color: var(--amber-hi); color: #ffe8b0; }
+.fh-select-item .fh-item-sub { margin-left: auto; font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: 0; }
+.fh-select-list::-webkit-scrollbar { width: 6px; }
+.fh-select-list::-webkit-scrollbar-track { background: transparent; }
+.fh-select-list::-webkit-scrollbar-thumb { background: rgba(232,163,61,0.35); border-radius: 3px; }
+.fh-select-list::-webkit-scrollbar-thumb:hover { background: rgba(232,163,61,0.55); }
+.fh-back {
+  position: absolute; top: 22px; left: 22px; z-index: 10;
+  padding: 6px 14px; font-size: 12px; letter-spacing: 2px;
+  color: #cfcfcf; background: rgba(8,10,8,0.6);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(232,163,61,0.25); border-radius: 3px;
+  cursor: pointer; transition: all 0.2s;
+}
+.fh-back:hover { color: var(--amber-hi); border-color: var(--amber-hi); }
+.fh-panel {
+  position: absolute; z-index: 3;
+  background: rgba(8, 10, 8, 0.72);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(232, 163, 61, 0.22);
+  border-radius: 5px;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.55);
+}
+.fh-panel::-webkit-scrollbar { width: 5px; }
+.fh-panel::-webkit-scrollbar-track { background: transparent; }
+.fh-panel::-webkit-scrollbar-thumb { background: rgba(232,163,61,0.25); border-radius: 3px; }
+.fh-panel-info {
+  left: 22px; top: 92px; width: 320px;
+  max-height: calc(100vh - 116px); overflow-y: auto;
+  padding: 18px 20px;
+}
+.fh-panel-config {
+  right: 22px; top: 92px; width: 244px;
+  max-height: calc(100vh - 116px); overflow-y: auto;
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.fh-info-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 12px; padding-bottom: 10px;
+  border-bottom: 1px solid rgba(232,163,61,0.15);
+}
+/* 国旗图标（随坦克国别切换） */
+.fh-flag { width: 27px; height: auto; align-self: center; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 1px 4px rgba(0,0,0,.5); }
+.fh-info-name { font-size: 20px; letter-spacing: 3px; color: var(--amber); }
+.fh-info-sub { font-size: 11px; letter-spacing: 2px; color: var(--steel); }
+.fh-info-history { font-size: 12.5px; line-height: 1.8; color: #cfcfcf; margin-bottom: 16px; text-indent: 2em; }
+.fh-spec-block { margin-bottom: 14px; }
+.fh-spec-block:last-child { margin-bottom: 0; }
+.fh-spec-title {
+  font-size: 11px; letter-spacing: 3px; color: var(--amber-hi);
+  margin-bottom: 8px; padding-bottom: 5px;
+  border-bottom: 1px solid rgba(232,163,61,0.12);
+}
+.fh-spec-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11.5px; }
+.fh-sk { color: var(--steel); letter-spacing: 1px; }
+.fh-sv { color: #fff8e0; font-family: "Consolas", monospace; letter-spacing: 0.5px; }
+.fh-bars { display: flex; flex-direction: column; gap: 6px; }
+.fh-bar-row { display: flex; align-items: center; gap: 10px; }
+.fh-bar-label { font-size: 11px; color: var(--steel); letter-spacing: 1px; width: 50px; flex-shrink: 0; }
+.fh-bar-track { flex: 1; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.fh-bar-fill { height: 100%; background: linear-gradient(90deg, #b8862e, #f4d98a, #ffb84d); border-radius: 3px; transition: width 0.3s; }
+.fh-cfg-title {
+  font-size: 13px; letter-spacing: 3px; color: var(--amber);
+  text-align: center; padding-bottom: 8px;
+  border-bottom: 1px solid rgba(232,163,61,0.15); margin-bottom: 4px;
+}
+.fh-cfg-preview { padding: 9px 11px; border: 1px solid rgba(232,163,61,0.15); border-radius: 3px; background: rgba(0,0,0,0.25); margin-top: 2px; }
+/* 难度选择行 */
+.fh-diff-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.fh-diff-label { font-size: 11px; color: var(--steel); letter-spacing: 2px; }
+.fh-diff-btn { flex: 1; padding: 7px 0; background: rgba(0,0,0,0.3); border: 1px solid rgba(232,163,61,0.25);
+  border-radius: 3px; color: #b8b2a2; font-size: 12px; letter-spacing: 2px; cursor: pointer;
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif; transition: all .15s; }
+.fh-diff-btn:hover { border-color: rgba(232,163,61,0.6); color: #ffe8b0; }
+.fh-diff-btn.active { background: rgba(232,163,61,0.16); border-color: var(--amber); color: var(--amber-hi); }
+.fh-pv-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 11px; letter-spacing: 1px; }
+.fh-pv-row span { color: var(--steel); }
+.fh-pv-row b { color: var(--amber-hi); font-family: "Consolas", monospace; font-weight: 400; }
+.fh-start-btn {
+  margin-top: 6px; padding: 10px 16px; font-size: 14px; letter-spacing: 4px;
+  background: linear-gradient(180deg, #6a5028, #3a2c18);
+  border: 1px solid var(--amber); color: #fff0d0;
+  border-radius: 4px; cursor: pointer; transition: all 0.2s;
+}
+.fh-start-btn:hover { box-shadow: 0 0 16px rgba(232,163,61,0.4); color: #ffe8b0; }
+@media (max-width: 720px) {
+  .fh-panel-info { width: calc(100vw - 44px); max-height: 38vh; }
+  .fh-panel-config { width: calc(100vw - 44px); top: auto; bottom: 16px; max-height: 48vh; }
+}
+
+/* ── 相机调试面板（默认隐藏；要再调机位时把 display:none 去掉即可） ── */
+.fh-debug { display: none; }
+.fh-debug-off {
+  position: absolute; right: 22px; bottom: 22px; z-index: 6; width: 248px;
+  background: rgba(8, 10, 8, 0.78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(232, 163, 61, 0.22); border-radius: 5px;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.55); padding: 12px 14px; pointer-events: auto;
+}
+.fh-debug-title { font-size: 11px; letter-spacing: 3px; color: var(--amber-hi); margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid rgba(232,163,61,0.15); }
+.fh-dbg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.fh-dbg-row label { font-size: 10px; color: var(--steel); letter-spacing: 1px; width: 42px; flex-shrink: 0; }
+.fh-dbg-row input[type=range] { flex: 1; height: 4px; -webkit-appearance: none; appearance: none; background: rgba(255,255,255,0.1); border-radius: 2px; outline: none; }
+.fh-dbg-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--amber); cursor: pointer; }
+.fh-dbg-row span { font-size: 10px; color: #fff8e0; font-family: "Consolas", monospace; width: 34px; text-align: right; flex-shrink: 0; }
+.fh-dbg-copy { margin-top: 6px; width: 100%; padding: 6px; font-size: 11px; letter-spacing: 2px; background: linear-gradient(180deg, #3a3024, #1f1a14); border: 1px solid var(--amber); color: var(--amber); border-radius: 3px; cursor: pointer; }
+.fh-dbg-copy:hover { box-shadow: 0 0 12px rgba(232,163,61,0.4); }
+
+/* ── 机库/切车载入浮标（小型指示：spinner + 进度条；悬浮坦克上方，不遮挡界面） ── */
+#hangar-loading { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 300;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 18px 30px 16px; background: rgba(10, 12, 9, .82);
+  border: 1px solid rgba(232, 163, 61, .35); border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .5);
+  opacity: 0; visibility: hidden; transition: opacity .18s, visibility .18s; pointer-events: none; }
+#hangar-loading.show { opacity: 1; visibility: visible; }
+#hangar-loading .hl-spinner { width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid rgba(232, 163, 61, .18); border-top-color: var(--amber);
+  animation: hlSpin .8s linear infinite; }
+@keyframes hlSpin { to { transform: rotate(360deg); } }
+#hangar-loading-text { color: #e8e2d2; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; letter-spacing: 4px; }
+#hangar-loading .hl-bar { width: 150px; height: 3px; background: rgba(232, 163, 61, .15);
+  border-radius: 2px; overflow: hidden; }
+#hangar-loading .hl-bar i { display: block; height: 100%; width: 0;
+  background: var(--amber); border-radius: 2px; transition: width .15s; }
