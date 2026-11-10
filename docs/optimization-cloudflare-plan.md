@@ -17,9 +17,13 @@
 | 布景命名 | `【5】lowpoly_buildings.glb` → `houseModel/town_kit.glb`；`oject/` → `objects/`，同步 `js/main.js`、`map-test.html`、`scripts/analyze_map_models.js` |
 | 上线主体 | `npm run build` → `dist/`：133 个文件 / 209.5MB，含 `_headers`、`BUILD_INFO.json`；`npm run preview` 本地预览 |
 | 校验 | `node scripts/verify-release.mjs` 静态校验通过；`node scripts/verify-browser.mjs` 端到端通过（封面→菜单→机库→战斗，0 个 404 / 0 个页面异常），基线 `drawCalls=246 / triangles=240959 / textures=58 / geometries=372` |
-| 待办 | WebP 纹理压缩、按需加载、帧率优化、git 初始化与 Pages 发布（等账号信息） |
+| 基线提交 | `git init` + `6c60b16`（219 文件），原始 GLB 冷备 `_archive/model-original/`（170MB） |
+| 性能基线 | `scripts/probe_perf.mjs`：town 17.5 FPS / 138 calls / 1.83M triangles；plains 12.5 FPS / 183 calls / 0.92M triangles（headless 软渲染，仅作相对对比，不代表真机帧率） |
+| 待办 | **无损**纹理压缩、按需加载、帧率优化、Pages 发布（等账号信息） |
 
 > **判断修正**：实测战斗态 `renderer.info.memory.textures=58`，说明 three 只在渲染时把纹理上传 GPU，此前「全量约 1GB 显存常驻」是理论上限而非常驻实测值；但 20 个 GLB 的 **172MB 下载量**与 CPU 侧解码/内存压力依然真实存在，仍是 P1 首要目标。
+
+> **决策变更（2026-11-10，用户要求「无画质损失」）**：阶段 1 弃用 §3.1 的 WebP q80 有损方案（169.8→39.5MB 数据仅作参考）。改为 **PNG 无损重压缩 + JPEG 原样保留 + 同 GLB 重复贴图去重**：像素完全不变，不改 `mimeType`、不加 `EXT_texture_webp`、不碰几何与节点名，只替换 image bufferView 字节，风险最低。实测无损组合可把 GLB 总量从 169.8MB 降到约 **105~120MB（-30~38%）**；其中 264 张 PNG 共 111.5MB，无损 PNG 重压后合计 61.1MB，而无损 WebP 为 85.8MB（反而更大，故不引入）。跨 GLB 的 114 张重复贴图无法在单个 GLB 内共享，需后续纹理外部化才能利用，精确值以转换脚本输出为准。零损失下体积收益有限，因此**首屏优化主要靠阶段 2 按需加载**（172MB → 3~5MB）。
 
 ---
 
